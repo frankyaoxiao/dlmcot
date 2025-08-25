@@ -221,9 +221,14 @@ def mmada_generate(model, prompt, steps=128, gen_length=128, block_length=128, t
     return (x, history) if save_history else x
 
 def generate_text(prompt, gen_length=128, steps=128, block_length=32, temperature=1.0, 
-                  cfg_scale=0.0, remasking='low_confidence', save_history=False, use_chat_template=True):
+                  cfg_scale=0.0, remasking='low_confidence', save_history=False, use_chat_template=True, enable_cot=False):
     """Generate text using MMaDA model."""
     _load_model()
+    
+    # Apply Chain-of-Thought system prompt if enabled
+    if enable_cot:
+        cot_system_prompt = "You should first think about the reasoning process in the mind and then provide the user with the answer. The reasoning process is enclosed within <think> </think> tags, i.e. <think> reasoning process here </think> answer here\n"
+        prompt = cot_system_prompt + prompt
     
     if use_chat_template:
         # Use chat template for conversational prompts
@@ -271,7 +276,7 @@ def _unload_model():
 
 def generate_texts_batch(prompts, gen_length=128, steps=128, block_length=32, temperature=0.0, 
                         cfg_scale=0.0, remasking='low_confidence', save_history=False, 
-                        batch_size=None, unload_after=False, use_chat_template=False):
+                        batch_size=None, unload_after=False, use_chat_template=False, enable_cot=False):
     """Generate text for multiple prompts in batches."""
     _load_model()
     
@@ -290,7 +295,7 @@ def generate_texts_batch(prompts, gen_length=128, steps=128, block_length=32, te
                     prompt, gen_length=gen_length, steps=steps,
                     block_length=block_length, temperature=temperature,
                     cfg_scale=cfg_scale, remasking=remasking, save_history=save_history,
-                    use_chat_template=use_chat_template
+                    use_chat_template=use_chat_template, enable_cot=enable_cot
                 )
                 batch_results.append(result)
             

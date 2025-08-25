@@ -20,6 +20,7 @@ def main():
                        choices=["low_confidence", "random"], help="Remasking strategy (default: low_confidence)")
     parser.add_argument("--save_history", action="store_true", help="Save generation history")
     parser.add_argument("--use_chat_template", type=bool, default=True, help="Use chat template for conversational prompts (default: True)")
+    parser.add_argument("--enable_cot", action="store_true", help="Enable Chain-of-Thought reasoning with <think> tags")
     
     args = parser.parse_args()
     
@@ -34,7 +35,8 @@ def main():
                 cfg_scale=args.cfg_scale,
                 remasking=args.remasking,
                 save_history=True,
-                use_chat_template=args.use_chat_template
+                use_chat_template=args.use_chat_template,
+                enable_cot=args.enable_cot
             )
             print("Generated text with history:")
             print(generated_text)
@@ -49,7 +51,8 @@ def main():
                 cfg_scale=args.cfg_scale,
                 remasking=args.remasking,
                 save_history=False,
-                use_chat_template=args.use_chat_template
+                use_chat_template=args.use_chat_template,
+                enable_cot=args.enable_cot
             )
             print("Generated text:")
             print(generated_text)
