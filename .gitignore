@@ -1,0 +1,280 @@
+# =============================================================================
+# MMaDA CoT Faithfulness Research Repository - .gitignore
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Python and Package Management
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# -----------------------------------------------------------------------------
+# Deep Learning and ML Specific
+# -----------------------------------------------------------------------------
+# PyTorch model files (large, should be downloaded)
+*.pth
+*.pt
+*.pkl
+*.pickle
+*.safetensors
+*.bin
+*.ckpt
+*.h5
+*.hdf5
+
+# Hugging Face cache and models
+.cache/
+.huggingface/
+transformers_cache/
+models--*/
+*.safetensors.index.json
+
+# TensorBoard and MLflow
+runs/
+mlruns/
+tensorboard_logs/
+*.tfevents.*
+
+# -----------------------------------------------------------------------------
+# Research and Experimental Outputs
+# -----------------------------------------------------------------------------
+# Generated outputs and results
+outputs/
+results/
+experiments/
+runs/
+logs/
+*.log
+*.out
+*.err
+
+# Data files (large datasets)
+data/
+datasets/
+*.csv
+*.json
+*.jsonl
+*.parquet
+*.arrow
+*.hdf5
+*.h5
+*.npz
+*.npy
+
+# Visualization outputs
+plots/
+figures/
+images/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.pdf
+*.eps
+
+# -----------------------------------------------------------------------------
+# Environment and Configuration
+# -----------------------------------------------------------------------------
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.conda/
+conda-meta/
+
+# Configuration files with sensitive data
+config.ini
+config.yaml
+config.yml
+*.config
+secrets.json
+credentials.json
+*.key
+*.pem
+
+# -----------------------------------------------------------------------------
+# IDE and Editor Files
+# -----------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# -----------------------------------------------------------------------------
+# OS and System Files
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# -----------------------------------------------------------------------------
+# Temporary and Cache Files
+# -----------------------------------------------------------------------------
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+
+# Cache directories
+.cache/
+cache/
+tmp/
+temp/
+
+# -----------------------------------------------------------------------------
+# Jupyter and Interactive Computing
+# -----------------------------------------------------------------------------
+.ipynb_checkpoints/
+*.ipynb
+jupyter_execute/
+
+# -----------------------------------------------------------------------------
+# Documentation and Build Artifacts
+# -----------------------------------------------------------------------------
+docs/_build/
+site/
+_build/
+build/
+dist/
+works.md
+
+# -----------------------------------------------------------------------------
+# Version Control and Backup
+# -----------------------------------------------------------------------------
+*.orig
+*.rej
+*.bak
+*.backup
+*~
+
+# -----------------------------------------------------------------------------
+# Research-Specific Files
+# -----------------------------------------------------------------------------
+# Experimental scripts and outputs
+experiments/
+trials/
+sessions/
+wandb/
+mlflow/
+
+# Large model outputs and generations
+generations/
+samples/
+examples/
+demo_outputs/
+
+# Analysis results
+analysis/
+metrics/
+evaluations/
+benchmarks/
+
+# -----------------------------------------------------------------------------
+# Specific to MMaDA Research
+# -----------------------------------------------------------------------------
+# Model checkpoints and weights
+checkpoints/
+weights/
+models/checkpoints/
+models/weights/
+
+# Generation history and evolution data
+history/
+evolution/
+diffusion_steps/
+generation_traces/
+
+# CoT faithfulness analysis outputs
+faithfulness_analysis/
+reasoning_traces/
+consistency_metrics/
+cot_analysis/
+reasoning_evolution/
+diffusion_analysis/
+faithfulness_metrics/
+
+# -----------------------------------------------------------------------------
+# Large Files and Archives
+# -----------------------------------------------------------------------------
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+*.bz2
+*.xz
+
+# -----------------------------------------------------------------------------
+# Database and Storage
+# -----------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.mdb
+*.accdb
+
+# -----------------------------------------------------------------------------
+# Network and API
+# -----------------------------------------------------------------------------
+# API keys and tokens
+api_keys.txt
+tokens.txt
+*.env.local
+
+# -----------------------------------------------------------------------------
+# Testing and Development
+# -----------------------------------------------------------------------------
+test_outputs/
+test_results/
+test_outputs.*
+test_results.*
+debug/
+*.debug
