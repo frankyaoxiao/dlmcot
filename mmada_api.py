@@ -14,12 +14,12 @@ def main():
     parser.add_argument("--gen_length", type=int, default=128, help="Generation length (default: 128)")
     parser.add_argument("--steps", type=int, default=128, help="Number of diffusion steps (default: 128)")
     parser.add_argument("--block_length", type=int, default=32, help="Block length (default: 32)")
-    parser.add_argument("--temperature", type=float, default=0.0, help="Temperature for sampling (default: 0.0)")
+    parser.add_argument("--temperature", type=float, default=1.0, help="Temperature for sampling (default: 1.0)")
     parser.add_argument("--cfg_scale", type=float, default=0.0, help="CFG scale (default: 0.0)")
     parser.add_argument("--remasking", type=str, default="low_confidence", 
                        choices=["low_confidence", "random"], help="Remasking strategy (default: low_confidence)")
     parser.add_argument("--save_history", action="store_true", help="Save generation history")
-    parser.add_argument("--use_chat_template", action="store_true", help="Use chat template for conversational prompts")
+    parser.add_argument("--use_chat_template", type=bool, default=True, help="Use chat template for conversational prompts (default: True)")
     
     args = parser.parse_args()
     

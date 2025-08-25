@@ -37,26 +37,35 @@ def _load_model():
     print(f"Loading MMaDA model on {_device}...")
     
     try:
+        # Load tokenizer first
+        print("Loading tokenizer...")
+        _tokenizer = AutoTokenizer.from_pretrained(
+            "Gen-Verse/MMaDA-8B-MixCoT", 
+            trust_remote_code=True
+        )
+        print("✓ Tokenizer loaded successfully")
+        
+        # Set chat template
+        _tokenizer.chat_template = "{% set loop_messages = messages %}{% for message in loop_messages %}{% set content = '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n'+ message['content'] | trim + '<|eot_id|>' %}{% if loop.index0 == 0 %}{% set content = bos_token + content %}{% endif %}{{ content }}{% endfor %}{{ '<|start_header_id|>assistant<|end_header_id|>\n' }}"
+        
         # Load model from Hugging Face
+        print("Loading model...")
         _model = MMadaModelLM.from_pretrained(
             "Gen-Verse/MMaDA-8B-MixCoT", 
             trust_remote_code=True, 
             torch_dtype=torch.bfloat16 if _device != "cpu" else torch.float32
         ).to(_device).eval()
-        
-        # Load tokenizer from Hugging Face
-        _tokenizer = AutoTokenizer.from_pretrained(
-            "Gen-Verse/MMaDA-8B-MixCoT", 
-            trust_remote_code=True
-        )
-        
-        # Set chat template
-        _tokenizer.chat_template = "{% set loop_messages = messages %}{% for message in loop_messages %}{% set content = '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n'+ message['content'] | trim + '<|eot_id|>' %}{% if loop.index0 == 0 %}{% set content = bos_token + content %}{% endif %}{{ content }}{% endfor %}{{ '<|start_header_id|>assistant<|end_header_id|>\n' }}"
+        print("✓ Model loaded successfully")
         
         print("MMaDA model loaded successfully!")
         
     except Exception as e:
         print(f"Error loading model: {e}")
+        import traceback
+        traceback.print_exc()
+        # Reset globals on error
+        _model = None
+        _tokenizer = None
         raise
 
 def add_gumbel_noise(logits, temperature):
@@ -211,8 +220,8 @@ def mmada_generate(model, prompt, steps=128, gen_length=128, block_length=128, t
 
     return (x, history) if save_history else x
 
-def generate_text(prompt, gen_length=128, steps=128, block_length=32, temperature=0.0, 
-                  cfg_scale=0.0, remasking='low_confidence', save_history=False, use_chat_template=False):
+def generate_text(prompt, gen_length=128, steps=128, block_length=32, temperature=1.0, 
+                  cfg_scale=0.0, remasking='low_confidence', save_history=False, use_chat_template=True):
     """Generate text using MMaDA model."""
     _load_model()
     
