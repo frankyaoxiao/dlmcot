@@ -11,12 +11,17 @@ from models import MMadaModelLM
 import warnings
 import os
 import sys
+import threading
+import multiprocessing
 
 warnings.filterwarnings("ignore")
 
+# Process-level singleton pattern
 _model = None
 _tokenizer = None
 _device = None
+_lock = threading.Lock()
+_process_id = None
 
 def _get_device():
     if torch.cuda.is_available():
@@ -26,47 +31,70 @@ def _get_device():
     else:
         return "cpu"
 
+def _get_process_id():
+    """Get current process ID for singleton management."""
+    return multiprocessing.current_process().pid
+
 def _load_model():
     """Load the MMaDA model and tokenizer if not already loaded."""
-    global _model, _tokenizer, _device
+    global _model, _tokenizer, _device, _process_id
+    
+    current_process_id = _get_process_id()
+    
+    # Check if we need to reload for a different process
+    if _process_id != current_process_id:
+        _model = None
+        _tokenizer = None
+        _device = None
+        _process_id = current_process_id
     
     if _model is not None and _tokenizer is not None:
         return
     
-    _device = _get_device()
-    print(f"Loading MMaDA model on {_device}...")
-    
-    try:
-        # Load tokenizer first
-        print("Loading tokenizer...")
-        _tokenizer = AutoTokenizer.from_pretrained(
-            "Gen-Verse/MMaDA-8B-MixCoT", 
-            trust_remote_code=True
-        )
-        print("✓ Tokenizer loaded successfully")
+    with _lock:
+        # Double-check after acquiring lock
+        if _model is not None and _tokenizer is not None:
+            return
         
-        # Set chat template
-        _tokenizer.chat_template = "{% set loop_messages = messages %}{% for message in loop_messages %}{% set content = '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n'+ message['content'] | trim + '<|eot_id|>' %}{% if loop.index0 == 0 %}{% set content = bos_token + content %}{% endif %}{{ content }}{% endfor %}{{ '<|start_header_id|>assistant<|end_header_id|>\n' }}"
+        _device = _get_device()
+        print(f"Loading MMaDA model on {_device} (process {current_process_id})...")
         
-        # Load model from Hugging Face
-        print("Loading model...")
-        _model = MMadaModelLM.from_pretrained(
-            "Gen-Verse/MMaDA-8B-MixCoT", 
-            trust_remote_code=True, 
-            torch_dtype=torch.bfloat16 if _device != "cpu" else torch.float32
-        ).to(_device).eval()
-        print("✓ Model loaded successfully")
-        
-        print("MMaDA model loaded successfully!")
-        
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        import traceback
-        traceback.print_exc()
-        # Reset globals on error
-        _model = None
-        _tokenizer = None
-        raise
+        try:
+            # Clear GPU memory before loading
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            
+            # Load tokenizer first
+            print("Loading tokenizer...")
+            _tokenizer = AutoTokenizer.from_pretrained(
+                "Gen-Verse/MMaDA-8B-MixCoT", 
+                trust_remote_code=True
+            )
+            print("✓ Tokenizer loaded successfully")
+            
+            # Set chat template
+            _tokenizer.chat_template = "{% set loop_messages = messages %}{% for message in loop_messages %}{% set content = '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n'+ message['content'] | trim + '<|eot_id|>' %}{% if loop.index0 == 0 %}{% set content = bos_token + content %}{% endif %}{{ content }}{% endfor %}{{ '<|start_header_id|>assistant<|end_header_id|>\n' }}"
+            
+            # Load model from Hugging Face
+            print("Loading model...")
+            _model = MMadaModelLM.from_pretrained(
+                "Gen-Verse/MMaDA-8B-MixCoT", 
+                trust_remote_code=True, 
+                torch_dtype=torch.bfloat16 if _device != "cpu" else torch.float32
+            ).to(_device).eval()
+            print("✓ Model loaded successfully")
+            
+            print(f"MMaDA model loaded successfully! (process {current_process_id})")
+            
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            import traceback
+            traceback.print_exc()
+            # Reset globals on error
+            _model = None
+            _tokenizer = None
+            _device = None
+            raise
 
 def add_gumbel_noise(logits, temperature):
     """
@@ -225,18 +253,46 @@ def generate_text(prompt, gen_length=128, steps=128, block_length=32, temperatur
     """Generate text using MMaDA model."""
     _load_model()
     
+    # Ensure tokenizer is loaded
+    if _tokenizer is None:
+        raise RuntimeError("Tokenizer not loaded properly")
+    
     # Apply Chain-of-Thought system prompt if enabled
     if enable_cot:
-        cot_system_prompt = "You should first think about the reasoning process in the mind and then provide the user with the answer. The reasoning process is enclosed within <think> </think> tags, i.e. <think> reasoning process here </think> answer here\n"
+        # Check if this is a GPQA-style question requiring "ANSWER: X" format
+        if "ANSWER:" in prompt and "multiple choice" in prompt.lower():
+            cot_system_prompt = "You should first think about the reasoning process in the mind and then provide the user with the answer. The reasoning process is enclosed within <think> </think> tags, i.e. <think> reasoning process here </think> answer here. IMPORTANT: After your reasoning, you MUST provide the answer in the exact format specified in the question (e.g., 'ANSWER: A' for multiple choice questions).\n"
+
+            '''
+            cot_system_prompt = """You should first think about the reasoning process in the mind and then provide the user with the answer. The reasoning process is enclosed within <think> </think> tags, i.e. <think> reasoning process here </think> answer here. 
+
+CRITICAL FORMAT REQUIREMENT: After your reasoning, you MUST provide the answer in the exact format "ANSWER: X" where X is the letter (A, B, C, or D) of your chosen answer. Do NOT include any other text after the answer. The format must be exactly "ANSWER: X" with no additional characters or explanations.
+
+Example format:
+<think>
+Your detailed reasoning here...
+</think>
+ANSWER: A
+'''
+        else:
+            cot_system_prompt = "You should first think about the reasoning process in the mind and then provide the user with the answer. The reasoning process is enclosed within <think> </think> tags, i.e. <think> reasoning process here </think> answer here\n"
         prompt = cot_system_prompt + prompt
     
     if use_chat_template:
         # Use chat template for conversational prompts
-        messages = [{"role": "user", "content": prompt}]
-        prompt = _tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        try:
+            messages = [{"role": "user", "content": prompt}]
+            prompt = _tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        except Exception as e:
+            print(f"Warning: Chat template failed, using raw prompt: {e}")
+            # Fall back to raw prompt if chat template fails
     
-    inputs = _tokenizer(text=prompt, return_tensors="pt", padding=True, padding_side="left")
-    input_ids = inputs["input_ids"].to(_device)
+    try:
+        inputs = _tokenizer(text=prompt, return_tensors="pt", padding=True, padding_side="left")
+        input_ids = inputs["input_ids"].to(_device)
+    except Exception as e:
+        print(f"Error in tokenization: {e}")
+        raise RuntimeError(f"Tokenization failed: {e}")
     
     if save_history:
         generated_ids, history = mmada_generate(

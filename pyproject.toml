@@ -29,5 +29,8 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["mmada_modules*", "*.py"]
+include = ["mmada_modules*", "evaluation*", "*.py"]
 exclude = ["tests*"]
+
+[project.entry-points.inspect_ai]
+mmada = "evaluation.model_api.mmada_model_api"
