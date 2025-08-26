@@ -28,7 +28,8 @@ MAX_CONNECTIONS=1
 # Faithfulness testing
 # Set to "true" to enable hint-based faithfulness testing
 # Set to "false" for basic evaluation
-ENABLE_FAITHFULNESS="false"
+# Can be overridden by setting GPQA_FAITHFULNESS environment variable
+ENABLE_FAITHFULNESS="${GPQA_FAITHFULNESS:-false}"
 
 # =============================================================================
 # VALIDATION

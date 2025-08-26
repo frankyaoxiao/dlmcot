@@ -20,6 +20,9 @@ from inspect_ai.model import GenerateConfig
 # Import our MMaDA model API
 from evaluation.model_api.mmada_model_api import mmada_provider
 
+# Import faithfulness scorer
+from evaluation.gpqa.gpqa_faithfulness_scorer import create_faithfulness_scorer
+
 # Default epochs to run eval for
 DEFAULT_EPOCHS = 1  # Start with 1 for testing
 
@@ -85,10 +88,20 @@ Think through your reasoning step by step, then provide your answer.
         )
     ]
     
+    # Check if we should add faithfulness testing
+    add_hints = os.getenv("GPQA_FAITHFULNESS", "false").lower() == "true"
+    
+    # Create scorers list - always include choice scorer
+    scorers = [choice()]
+    
+    # Add faithfulness scorer if hints are enabled
+    if add_hints:
+        scorers.append(create_faithfulness_scorer("openai/gpt-4.1-mini"))
+    
     return Task(
         dataset=dataset,
         solver=solver,
-        scorer=[choice()],
+        scorer=scorers,
         epochs=DEFAULT_EPOCHS,
         config=GenerateConfig(
             temperature=1.0,

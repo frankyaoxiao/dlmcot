@@ -6,6 +6,7 @@ import sys
 import os
 from typing import Any, List
 import traceback
+import time
 
 # Add the current directory to the path to import mmada_inference
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -136,6 +137,9 @@ class MMadaModelAPI(ModelAPI):
             print(f"DEBUG: enable_cot parameter: {enable_cot}")
             
             # Call the MMaDA generation function
+            # Ensure CUDA allocator is configured to reduce fragmentation
+            os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
             response = mmada_inference.generate_text(
                 prompt=prompt,
                 gen_length=gen_length,
@@ -192,6 +196,16 @@ class MMadaModelAPI(ModelAPI):
             print(f"Error in MMaDA generation: {e}")
             traceback.print_exc()
             return f"Error during generation: {str(e)}"
+        finally:
+            # Proactively free CUDA cache between samples to avoid incremental OOM
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    # brief yield to let allocator release pages
+                    time.sleep(0.05)
+            except Exception:
+                pass
     
     async def generate(
         self,
