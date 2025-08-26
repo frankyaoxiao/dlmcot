@@ -26,7 +26,7 @@ def main():
     
     try:
         if args.save_history:
-            generated_text, history, tokenizer = generate_text(
+            generated_text, history, tokenizer, history_file = generate_text(
                 args.prompt,
                 gen_length=args.gen_length,
                 steps=args.steps,
@@ -41,6 +41,9 @@ def main():
             print("Generated text with history:")
             print(generated_text)
             print(f"\nHistory saved with {len(history['states'])} states")
+            print(f"History file saved to: {history_file}")
+            print(f"Total steps: {history['summary']['total_steps']}")
+            print(f"Finalized tokens: {history['summary']['finalized_tokens_count']}")
         else:
             generated_text = generate_text(
                 args.prompt,

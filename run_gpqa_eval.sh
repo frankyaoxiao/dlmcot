@@ -9,7 +9,7 @@
 
 # Test size configuration
 # Options: "small", "medium", "large", "custom"
-TEST_SIZE="small"
+TEST_SIZE="large"
 
 # Custom parameters (used when TEST_SIZE="custom")
 CUSTOM_LIMIT=10
@@ -66,9 +66,9 @@ case $TEST_SIZE in
         echo "📊 Running MEDIUM test (20 questions, 3 samples each)"
         ;;
     "large")
-        LIMIT=50
+        LIMIT=100
         MAX_SAMPLES=5
-        echo "📊 Running LARGE test (50 questions, 5 samples each)"
+        echo "📊 Running LARGE test (100 questions, 5 samples each)"
         ;;
     "custom")
         LIMIT=$CUSTOM_LIMIT
