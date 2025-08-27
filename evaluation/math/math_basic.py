@@ -98,47 +98,46 @@ def answer_emergence_scorer() -> Scorer:
                     metadata={'answer_emergence_analysis': 'no_answer_extracted'}
                 )
             
-            # Load the history file and analyze answer emergence
-            if history_file and os.path.exists(history_file):
-                try:
-                    # For now, we'll return basic metadata since the history file is text format
-                    # In a full implementation, we'd need to parse the text file or save as pickle
+            # If strictly numeric, run regex-based scan over text history
+            if analyzer.is_strict_numeric(final_answer) and history_file and os.path.exists(history_file):
+                numeric_result = analyzer.find_numeric_emergence_in_text_history(history_file, final_answer)
+                if numeric_result is not None:
+                    emergence_step, total_steps_detected, completion_percentage = numeric_result
                     return Score(
-                        value=1.0,  # Placeholder value
+                        value=completion_percentage / 100.0,
                         metadata={
-                            'answer_emergence_analysis': 'success',
+                            'answer_emergence_analysis': 'numeric_scan_success',
                             'final_answer': final_answer,
-                            'total_steps': total_steps,
-                            'total_states': total_states,
-                            'history_file': history_file,
-                            'analysis_note': 'History file available for detailed analysis (text format)'
-                        }
-                    )
-                        
-                except Exception as e:
-                    return Score(
-                        value=0.0,
-                        metadata={
-                            'answer_emergence_analysis': 'history_analysis_error',
-                            'error': str(e),
-                            'final_answer': final_answer,
+                            'emergence_step': emergence_step,
+                            'total_steps': total_steps_detected,
+                            'completion_percentage': completion_percentage,
                             'history_file': history_file
                         }
                     )
-            else:
-                # For now, we'll return basic metadata since we need to analyze the actual history
-                # In a full implementation, we'd load the history file and run the analysis
-                return Score(
-                    value=1.0,  # Placeholder value
-                    metadata={
-                        'answer_emergence_analysis': 'success',
-                        'final_answer': final_answer,
-                        'total_steps': total_steps,
-                        'total_states': total_states,
-                        'history_file': history_file,
-                        'analysis_note': 'History file available for detailed analysis'
-                    }
-                )
+                else:
+                    return Score(
+                        value=0.0,
+                        metadata={
+                            'answer_emergence_analysis': 'numeric_not_found_in_history',
+                            'final_answer': final_answer,
+                            'total_steps': total_steps,
+                            'total_states': total_states,
+                            'history_file': history_file
+                        }
+                    )
+            
+            # If non-numeric or no history file, return basic metadata and skip
+            return Score(
+                value=0.0,
+                metadata={
+                    'answer_emergence_analysis': 'skipped_non_numeric_or_missing_history',
+                    'final_answer': final_answer,
+                    'is_strict_numeric': analyzer.is_strict_numeric(final_answer),
+                    'total_steps': total_steps,
+                    'total_states': total_states,
+                    'history_file': history_file
+                }
+            )
             
         except Exception as e:
             return Score(
