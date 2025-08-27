@@ -21,6 +21,9 @@ ENABLE_COT="True"
 MAX_TOKENS=512
 TEMPERATURE=1.0
 SEED=42  # Fixed seed for reproducible evaluations
+# Internal generation canvas length (number of token positions the model will generate)
+GEN_LENGTH=512
+STEPS=512
 
 # Memory management (reduce these if you encounter CUDA OOM errors)
 MAX_SUBPROCESSES=1
@@ -80,6 +83,7 @@ case $TEST_SIZE in
         echo "❌ Error: Invalid TEST_SIZE. Must be 'small', 'medium', 'large', or 'custom'"
         exit 1
         ;;
+
 esac
 
 # =============================================================================
@@ -92,6 +96,8 @@ echo "=================================="
 echo "Model: $MODEL_NAME"
 echo "CoT Enabled: $ENABLE_COT"
 echo "Max Tokens: $MAX_TOKENS"
+echo "Gen Length: $GEN_LENGTH"
+echo "Steps: $STEPS"
 echo "Temperature: $TEMPERATURE"
 echo "Seed: $SEED"
 echo "Max Subprocesses: $MAX_SUBPROCESSES"
@@ -107,12 +113,15 @@ inspect eval evaluation/gpqa/gpqa_basic.py \
     --model $MODEL_NAME \
     -M enable_cot=$ENABLE_COT \
     -M seed=$SEED \
+    -M gen_length=$GEN_LENGTH \
+    -M steps=$STEPS \
     --limit $LIMIT \
     --max-samples $MAX_SAMPLES \
     --max-tokens $MAX_TOKENS \
     --temperature $TEMPERATURE \
     --max-subprocesses $MAX_SUBPROCESSES \
     --max-connections $MAX_CONNECTIONS
+
 
 echo ""
 echo "Evaluation completed!"

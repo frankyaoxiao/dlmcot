@@ -9,7 +9,7 @@
 
 # Test size configuration
 # Options: "small", "medium", "large", "custom"
-TEST_SIZE="small"
+TEST_SIZE="large"
 
 # Custom parameters (used when TEST_SIZE="custom")
 CUSTOM_LIMIT=10
@@ -19,8 +19,13 @@ CUSTOM_MAX_SAMPLES=3
 MODEL_NAME="mmada-cot/test"
 ENABLE_COT="True"
 MAX_TOKENS=512
-TEMPERATURE=0.5
+TEMPERATURE=1.0
 SEED=42  # Fixed seed for reproducible evaluations
+# Internal generation parameters
+GEN_LENGTH=512
+STEPS=512
+# Answer emergence analysis options
+ANSWER_EMERGENCE_SKIP_SINGLE_DIGIT=${ANSWER_EMERGENCE_SKIP_SINGLE_DIGIT:-true}
 
 # Memory management (reduce these if you encounter CUDA OOM errors)
 MAX_SUBPROCESSES=1
@@ -33,8 +38,10 @@ MAX_CONNECTIONS=1
 ENABLE_FAITHFULNESS="${GPQA_FAITHFULNESS:-false}"
 
 # MATH-specific parameters
-MATH_LEVELS="3,4"  # Math difficulty levels (1-5)
+MATH_LEVELS="3,4,5"  # Math difficulty levels (1-5)
 MATH_SUBJECTS="algebra,calculus"  # Math subjects to test
+# Numeric-only filtering for answer emergence analysis
+NUMERIC_ONLY=${NUMERIC_ONLY:-false}
 
 # =============================================================================
 # VALIDATION
@@ -96,6 +103,8 @@ echo "=================================="
 echo "Model: $MODEL_NAME"
 echo "CoT Enabled: $ENABLE_COT"
 echo "Max Tokens: $MAX_TOKENS"
+echo "Gen Length: $GEN_LENGTH"
+echo "Steps: $STEPS"
 echo "Temperature: $TEMPERATURE"
 echo "Seed: $SEED"
 echo "Math Levels: $MATH_LEVELS"
@@ -103,17 +112,24 @@ echo "Math Subjects: $MATH_SUBJECTS"
 echo "Max Subprocesses: $MAX_SUBPROCESSES"
 echo "Max Connections: $MAX_CONNECTIONS"
 echo "Faithfulness Testing: $ENABLE_FAITHFULNESS"
+echo "Skip single-digit answers in emergence: $ANSWER_EMERGENCE_SKIP_SINGLE_DIGIT"
+echo "Numeric-only questions: $NUMERIC_ONLY"
 echo ""
 
 # Set environment variable for faithfulness testing
 export GPQA_FAITHFULNESS=$ENABLE_FAITHFULNESS
+# Set analyzer behavior
+export ANSWER_EMERGENCE_SKIP_SINGLE_DIGIT=$ANSWER_EMERGENCE_SKIP_SINGLE_DIGIT
 
 # Run the evaluation
 inspect eval evaluation/math/math_basic.py \
     --model $MODEL_NAME \
     -M enable_cot=$ENABLE_COT \
     -M seed=$SEED \
+    -M gen_length=$GEN_LENGTH \
+    -M steps=$STEPS \
     -T levels=$MATH_LEVELS \
+    -T numeric_only=$NUMERIC_ONLY \
     -T subjects=$MATH_SUBJECTS \
     --limit $LIMIT \
     --max-samples $MAX_SAMPLES \

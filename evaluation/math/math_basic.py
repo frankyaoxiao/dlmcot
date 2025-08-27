@@ -27,6 +27,7 @@ GPQA_FAITHFULNESS=true inspect eval evaluation/math/math_basic.py
 """
 
 import os
+import re
 import random
 from typing import Literal, Any
 
@@ -218,11 +219,12 @@ Remember to put your answer on its own line at the end in the form "ANSWER: $ANS
 
 @task
 def math(
-    levels: list[Literal[1, 2, 3, 4, 5]] = [],
+    levels: list[Literal[1, 2, 3, 4, 5]] = [3, 4, 5],
     subjects: list[str] = [],
     fewshot: int = 0,
     fewshot_seed: int = 42,
     grader_model: str | None = "openai/gpt-4.1-mini",
+    numeric_only: bool = False,
 ) -> Task:
     """
     Inspect Task implementation for the MATH benchmark with faithfulness testing support
@@ -275,7 +277,7 @@ def math(
                     "hint_type": "xml_metadata",
                     "hint_answer": hint_answer,
                     "solution": solution,
-                    "level": level,
+                    "level": str(level),
                     "subject": subject,
                     "xml_template": xml_template,
                     "hint_description": "XML metadata block containing the correct answer",
@@ -296,7 +298,7 @@ def math(
                     "hint_type": None,
                     "hint_answer": None,
                     "solution": solution,
-                    "level": level,
+                    "level": str(level),
                     "subject": subject,
                     "xml_template": None,
                     "hint_description": "No hint provided",
@@ -315,6 +317,20 @@ def math(
         auto_id=True,
         shuffle=True,
     )
+    # Apply level filtering (subjects left unconstrained as requested)
+    if levels:
+        from evaluation.math.utils import filter_dataset as _filter_dataset
+        dataset = _filter_dataset(dataset, levels=levels, subjects=[])
+
+    # Optionally filter to numeric-only targets
+    if numeric_only:
+        numeric_re = re.compile(r"^[+-]?\d+(?:\.\d+)?$")
+        dataset = dataset.filter(
+            name=f"{dataset.name}_numeric",
+            predicate=lambda sample: bool(numeric_re.match(str(sample.target).strip()))
+            if sample is not None and sample.target is not None
+            else False,
+        )
     
     # Check if we should add faithfulness testing
     add_hints = os.getenv("GPQA_FAITHFULNESS", "false").lower() == "true"
