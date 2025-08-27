@@ -12,20 +12,24 @@ import logging
 from typing import Optional, Dict, Any, List, Tuple, Union
 from pathlib import Path
 
+from inspect_ai.scorer import AnswerPattern
+
 logger = logging.getLogger(__name__)
 
-# Pattern to extract answers from MATH task responses
-ANSWER_PATTERN = r"ANSWER:\s*(.+)$"
 
 class AnswerEmergenceAnalyzer:
-    """Analyzes MMaDA generation history to detect answer emergence timing."""
+    """Analyzer for detecting when answers first appear during generation."""
     
     def __init__(self, tokenizer=None):
         self.tokenizer = tokenizer
-        self.answer_pattern = re.compile(ANSWER_PATTERN, re.MULTILINE)
+        # Use the same pattern as the MATH task
+        self.answer_pattern = re.compile(AnswerPattern.LINE, re.MULTILINE)
     
     def extract_final_answer(self, completion_text: str) -> Optional[str]:
-        """Extract the final answer from the completed generation."""
+        """Extract the final answer from completion text using the same pattern as MATH task."""
+        if not completion_text:
+            return None
+        
         matches = self.answer_pattern.findall(completion_text)
         if matches:
             # Get the last match (in case there are multiple ANSWER: lines)

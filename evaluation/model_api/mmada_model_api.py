@@ -283,12 +283,18 @@ class MMadaModelAPI(ModelAPI):
             remasking=remasking,
             use_chat_template=use_chat_template,
             enable_cot=enable_cot,
-            seed=seed,
-            **kwargs
+            seed=seed
         )
         
         print(f"DEBUG: Generated response: '{response_content}'")
         print(f"DEBUG: Response length: {len(response_content)}")
+        print(f"DEBUG: History object type: {type(history)}")
+        print(f"DEBUG: History is None: {history is None}")
+        if history is not None:
+            print(f"DEBUG: History keys: {list(history.keys())}")
+            print(f"DEBUG: History summary: {history.get('summary', 'No summary')}")
+            print(f"DEBUG: History states count: {len(history.get('states', []))}")
+        print(f"DEBUG: History file: {history_file}")
         
         # Store history information in metadata for answer emergence analysis
         metadata = {}
@@ -299,6 +305,10 @@ class MMadaModelAPI(ModelAPI):
                 'history_file': history_file
             }
             print(f"DEBUG: Stored history metadata: {metadata['generation_history']}")
+        else:
+            print(f"DEBUG: No history to store in metadata")
+        
+        print(f"DEBUG: Final metadata: {metadata}")
         
         # Create assistant message
         assistant_message = ChatMessageAssistant(

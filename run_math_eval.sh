@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# MMaDA GPQA Evaluation Script
+# MMaDA MATH Evaluation Script
 # Customizable parameters for different test sizes
 
 # =============================================================================
@@ -9,17 +9,17 @@
 
 # Test size configuration
 # Options: "small", "medium", "large", "custom"
-TEST_SIZE="large"
+TEST_SIZE="small"
 
 # Custom parameters (used when TEST_SIZE="custom")
 CUSTOM_LIMIT=10
-CUSTOM_MAX_SAMPLES=5
+CUSTOM_MAX_SAMPLES=3
 
 # Model configuration
 MODEL_NAME="mmada-cot/test"
 ENABLE_COT="True"
 MAX_TOKENS=512
-TEMPERATURE=1.0
+TEMPERATURE=0.5
 SEED=42  # Fixed seed for reproducible evaluations
 
 # Memory management (reduce these if you encounter CUDA OOM errors)
@@ -31,6 +31,10 @@ MAX_CONNECTIONS=1
 # Set to "false" for basic evaluation
 # Can be overridden by setting GPQA_FAITHFULNESS environment variable
 ENABLE_FAITHFULNESS="${GPQA_FAITHFULNESS:-false}"
+
+# MATH-specific parameters
+MATH_LEVELS="3,4"  # Math difficulty levels (1-5)
+MATH_SUBJECTS="algebra,calculus"  # Math subjects to test
 
 # =============================================================================
 # VALIDATION
@@ -59,22 +63,22 @@ case $TEST_SIZE in
     "small")
         LIMIT=5
         MAX_SAMPLES=2
-        echo "📊 Running SMALL test (5 questions, 2 samples each)"
+        echo "📊 Running SMALL test (5 problems, 2 samples each)"
         ;;
     "medium")
         LIMIT=20
         MAX_SAMPLES=3
-        echo "📊 Running MEDIUM test (20 questions, 3 samples each)"
+        echo "📊 Running MEDIUM test (20 problems, 3 samples each)"
         ;;
     "large")
         LIMIT=100
         MAX_SAMPLES=5
-        echo "📊 Running LARGE test (100 questions, 5 samples each)"
+        echo "📊 Running LARGE test (100 problems, 5 samples each)"
         ;;
     "custom")
         LIMIT=$CUSTOM_LIMIT
         MAX_SAMPLES=$CUSTOM_MAX_SAMPLES
-        echo "📊 Running CUSTOM test ($LIMIT questions, $MAX_SAMPLES samples each)"
+        echo "📊 Running CUSTOM test ($LIMIT problems, $MAX_SAMPLES samples each)"
         ;;
     *)
         echo "❌ Error: Invalid TEST_SIZE. Must be 'small', 'medium', 'large', or 'custom'"
@@ -87,13 +91,15 @@ esac
 # =============================================================================
 
 echo ""
-echo "🚀 Starting MMaDA GPQA Evaluation"
+echo "🚀 Starting MMaDA MATH Evaluation"
 echo "=================================="
 echo "Model: $MODEL_NAME"
 echo "CoT Enabled: $ENABLE_COT"
 echo "Max Tokens: $MAX_TOKENS"
 echo "Temperature: $TEMPERATURE"
 echo "Seed: $SEED"
+echo "Math Levels: $MATH_LEVELS"
+echo "Math Subjects: $MATH_SUBJECTS"
 echo "Max Subprocesses: $MAX_SUBPROCESSES"
 echo "Max Connections: $MAX_CONNECTIONS"
 echo "Faithfulness Testing: $ENABLE_FAITHFULNESS"
@@ -103,10 +109,12 @@ echo ""
 export GPQA_FAITHFULNESS=$ENABLE_FAITHFULNESS
 
 # Run the evaluation
-inspect eval evaluation/gpqa/gpqa_basic.py \
+inspect eval evaluation/math/math_basic.py \
     --model $MODEL_NAME \
     -M enable_cot=$ENABLE_COT \
     -M seed=$SEED \
+    -T levels=$MATH_LEVELS \
+    -T subjects=$MATH_SUBJECTS \
     --limit $LIMIT \
     --max-samples $MAX_SAMPLES \
     --max-tokens $MAX_TOKENS \

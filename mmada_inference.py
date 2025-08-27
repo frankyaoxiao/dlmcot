@@ -71,10 +71,10 @@ def _load_model():
                 trust_remote_code=True
             )
             print("✓ Tokenizer loaded successfully")
-            
+        
             # Set chat template
             _tokenizer.chat_template = "{% set loop_messages = messages %}{% for message in loop_messages %}{% set content = '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n'+ message['content'] | trim + '<|eot_id|>' %}{% if loop.index0 == 0 %}{% set content = bos_token + content %}{% endif %}{{ content }}{% endfor %}{{ '<|start_header_id|>assistant<|end_header_id|>\n' }}"
-            
+        
             # Load model from Hugging Face
             print("Loading model...")
             _model = MMadaModelLM.from_pretrained(
@@ -85,7 +85,7 @@ def _load_model():
             print("✓ Model loaded successfully")
             
             print(f"MMaDA model loaded successfully! (process {current_process_id})")
-            
+        
         except Exception as e:
             print(f"Error loading model: {e}")
             import traceback
@@ -131,7 +131,7 @@ def get_num_transfer_tokens(mask_index, steps):
 
 @torch.no_grad()
 def mmada_generate(model, prompt, steps=128, gen_length=128, block_length=128, temperature=0.,
-                   cfg_scale=0., remasking='low_confidence', mask_id=126336, attention_mask=None, save_history=False):
+                   cfg_scale=0., remasking='low_confidence', mask_id=126336, attention_mask=None, save_history=False, seed=None):
     """
     Generate text using MMaDA's masked diffusion process.
     
@@ -147,11 +147,25 @@ def mmada_generate(model, prompt, steps=128, gen_length=128, block_length=128, t
         mask_id: The token id of [MASK] is 126336.
         attention_mask: Optional attention mask
         save_history: Whether to save generation history for analysis.
+        seed: Random seed for deterministic generation. If None, generation will be random.
     
     Returns:
         If save_history=False: generated sequence tensor
         If save_history=True: (generated sequence tensor, generation history dict)
     """
+    # Set random seed for deterministic generation if specified
+    if seed is not None:
+        import random
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
+        # Set deterministic mode for CUDA operations
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    
     if attention_mask is not None and 0.0 in attention_mask:
         attention_bias = (attention_mask[:, :, None] & attention_mask[:, None, :]).bool().unsqueeze(1)
     else:
@@ -343,6 +357,13 @@ def save_generation_history_to_file(history, tokenizer, output_file=None):
         f.write(f"CFG Scale: {params['cfg_scale']}\n")
         f.write(f"Remasking Strategy: {params['remasking']}\n\n")
         
+        # Show the complete prompt
+        f.write("PROMPT:\n")
+        f.write("-" * 40 + "\n")
+        prompt_tokens = history['states'][0][0].cpu().tolist()[:history['prompt_length']]
+        prompt_text = tokenizer.decode(prompt_tokens, skip_special_tokens=True)
+        f.write(f"{repr(prompt_text)}\n\n")
+        
         # Block Structure
         f.write("BLOCK STRUCTURE:\n")
         f.write("-" * 40 + "\n")
@@ -368,14 +389,6 @@ def save_generation_history_to_file(history, tokenizer, output_file=None):
         f.write(f"Finalized Tokens Count: {summary['finalized_tokens_count']}\n")
         f.write(f"Generation Completed: {summary['generation_completed']}\n\n")
         
-        # Token Finalization Timeline
-        f.write("TOKEN FINALIZATION TIMELINE:\n")
-        f.write("-" * 40 + "\n")
-        finalized_tokens = sorted(history['finalized_at_step'].items(), key=lambda x: x[1])
-        for pos, step in finalized_tokens:
-            f.write(f"Position {pos}: Finalized at step {step}\n")
-        f.write("\n")
-        
         # Detailed Step-by-Step Analysis
         f.write("DETAILED STEP-BY-STEP ANALYSIS:\n")
         f.write("-" * 40 + "\n")
@@ -389,17 +402,11 @@ def save_generation_history_to_file(history, tokenizer, output_file=None):
             f.write(f"\nStep {step_info['global_step']} (Block {step_info['block']}, Block Step {step_info['block_step']}):\n")
             f.write(f"  Block Range: {step_info['block_start']}-{step_info['block_end']-1}\n")
             
-            # Show current state (first few and last few tokens for readability)
+            # Show generated tokens so far
             current_tokens = state[0].cpu().tolist()
             prompt_len = history['prompt_length']
-            
-            # Show prompt tokens
-            prompt_tokens = current_tokens[:prompt_len]
-            prompt_text = tokenizer.decode(prompt_tokens, skip_special_tokens=True)
-            f.write(f"  Prompt: {repr(prompt_text[:100])}{'...' if len(prompt_text) > 100 else ''}\n")
-            
-            # Show generated tokens so far
             generated_tokens = current_tokens[prompt_len:]
+            
             if any(t != history['mask_id'] for t in generated_tokens):
                 # Find the last non-mask token
                 last_finalized = max((i for i, t in enumerate(generated_tokens) if t != history['mask_id']), default=-1)
@@ -408,12 +415,14 @@ def save_generation_history_to_file(history, tokenizer, output_file=None):
                     finalized_text = tokenizer.decode(finalized_so_far, skip_special_tokens=True)
                     f.write(f"  Generated so far: {repr(finalized_text)}\n")
             
+            f.write("\n")  # Newline between generated so far and model prediction
+            
             # Show prediction for this step
             pred_tokens = prediction[0].cpu().tolist()
             pred_generated = pred_tokens[prompt_len:]
             if any(t != history['mask_id'] for t in pred_generated):
                 pred_text = tokenizer.decode(pred_generated, skip_special_tokens=True)
-                f.write(f"  Model prediction: {repr(pred_text)}\n")
+                f.write(f"  Generated so far: {repr(pred_text)}\n")
             
             # Show remasking decision
             f.write(f"  Tokens finalized: {remask_decision['tokens_finalized']}\n")
@@ -450,8 +459,9 @@ def save_generation_history_to_file(history, tokenizer, output_file=None):
     print(f"Generation history saved to: {output_file}")
     return output_file
 
+
 def generate_text(prompt, gen_length=128, steps=128, block_length=32, temperature=1.0, 
-                  cfg_scale=0.0, remasking='low_confidence', save_history=False, use_chat_template=True, enable_cot=False):
+                  cfg_scale=0.0, remasking='low_confidence', save_history=False, use_chat_template=True, enable_cot=False, seed=None):
     """Generate text using MMaDA model."""
     _load_model()
     
@@ -500,19 +510,20 @@ ANSWER: A
         generated_ids, history = mmada_generate(
             _model, input_ids, steps=steps, gen_length=gen_length, 
             block_length=block_length, temperature=temperature,
-            cfg_scale=cfg_scale, remasking=remasking, save_history=True
+            cfg_scale=cfg_scale, remasking=remasking, save_history=True, seed=seed
         )
         generated_text = _tokenizer.batch_decode(generated_ids[:, input_ids.shape[1]:], skip_special_tokens=True)[0]
         
-        # Automatically save history to file
+        # Save generation history to text file for human inspection
         history_file = save_generation_history_to_file(history, _tokenizer)
         
+        # Return the history dictionary directly for immediate analysis
         return generated_text, history, _tokenizer, history_file
     else:
         generated_ids = mmada_generate(
             _model, input_ids, steps=steps, gen_length=gen_length,
             block_length=block_length, temperature=temperature,
-            cfg_scale=cfg_scale, remasking=remasking, save_history=False
+            cfg_scale=cfg_scale, remasking=remasking, save_history=False, seed=seed
         )
         generated_text = _tokenizer.batch_decode(generated_ids[:, input_ids.shape[1]:], skip_special_tokens=True)[0]
         return generated_text

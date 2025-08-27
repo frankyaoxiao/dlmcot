@@ -71,14 +71,8 @@ def answer_emergence_scorer() -> Scorer:
                 )
             
             # Check if we have generation history metadata
-            model_output = getattr(state, 'model_output', None)
-            if not model_output or not hasattr(model_output, 'metadata'):
-                return Score(
-                    value=0.0,
-                    metadata={'answer_emergence_analysis': 'no_metadata'}
-                )
-            
-            metadata = model_output.metadata
+            # The metadata is stored in state.output.metadata, not model_output.metadata
+            metadata = getattr(state.output, 'metadata', {})
             if not metadata or 'generation_history' not in metadata:
                 return Score(
                     value=0.0,
@@ -95,25 +89,56 @@ def answer_emergence_scorer() -> Scorer:
             analyzer = AnswerEmergenceAnalyzer()
             final_answer = analyzer.extract_final_answer(completion)
             
+            print(f"DEBUG: Completion text: '{completion}'")
+            print(f"DEBUG: Extracted answer: '{final_answer}'")
+            
             if not final_answer:
                 return Score(
                     value=0.0,
                     metadata={'answer_emergence_analysis': 'no_answer_extracted'}
                 )
             
-            # For now, we'll return basic metadata since we need to analyze the actual history
-            # In a full implementation, we'd load the history file and run the analysis
-            return Score(
-                value=1.0,  # Placeholder - actual analysis would be more complex
-                metadata={
-                    'answer_emergence_analysis': 'success',
-                    'final_answer': final_answer,
-                    'total_steps': total_steps,
-                    'total_states': total_states,
-                    'history_file': history_file,
-                    'analysis_note': 'History file available for detailed analysis'
-                }
-            )
+            # Load the history file and analyze answer emergence
+            if history_file and os.path.exists(history_file):
+                try:
+                    # For now, we'll return basic metadata since the history file is text format
+                    # In a full implementation, we'd need to parse the text file or save as pickle
+                    return Score(
+                        value=1.0,  # Placeholder value
+                        metadata={
+                            'answer_emergence_analysis': 'success',
+                            'final_answer': final_answer,
+                            'total_steps': total_steps,
+                            'total_states': total_states,
+                            'history_file': history_file,
+                            'analysis_note': 'History file available for detailed analysis (text format)'
+                        }
+                    )
+                        
+                except Exception as e:
+                    return Score(
+                        value=0.0,
+                        metadata={
+                            'answer_emergence_analysis': 'history_analysis_error',
+                            'error': str(e),
+                            'final_answer': final_answer,
+                            'history_file': history_file
+                        }
+                    )
+            else:
+                # For now, we'll return basic metadata since we need to analyze the actual history
+                # In a full implementation, we'd load the history file and run the analysis
+                return Score(
+                    value=1.0,  # Placeholder value
+                    metadata={
+                        'answer_emergence_analysis': 'success',
+                        'final_answer': final_answer,
+                        'total_steps': total_steps,
+                        'total_states': total_states,
+                        'history_file': history_file,
+                        'analysis_note': 'History file available for detailed analysis'
+                    }
+                )
             
         except Exception as e:
             return Score(
