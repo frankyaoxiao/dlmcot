@@ -52,6 +52,77 @@ from utils import (
 # Import faithfulness scorer
 from evaluation.math.math_faithfulness_scorer import create_faithfulness_scorer
 
+# Import answer emergence analyzer
+from evaluation.math.answer_emergence_analyzer import AnswerEmergenceAnalyzer
+
+@scorer(metrics=[])  # No metrics since this is analysis-only
+def answer_emergence_scorer() -> Scorer:
+    """Create a scorer that analyzes when answers first appear during generation."""
+    
+    async def score(state: TaskState, target: Target) -> Score:
+        """Analyze answer emergence timing from generation history."""
+        try:
+            # Get the completion text
+            completion = state.output.completion
+            if not completion:
+                return Score(
+                    value=0.0,
+                    metadata={'answer_emergence_analysis': 'no_completion'}
+                )
+            
+            # Check if we have generation history metadata
+            model_output = getattr(state, 'model_output', None)
+            if not model_output or not hasattr(model_output, 'metadata'):
+                return Score(
+                    value=0.0,
+                    metadata={'answer_emergence_analysis': 'no_metadata'}
+                )
+            
+            metadata = model_output.metadata
+            if not metadata or 'generation_history' not in metadata:
+                return Score(
+                    value=0.0,
+                    metadata={'answer_emergence_analysis': 'no_history'}
+                )
+            
+            # Extract generation history information
+            history_info = metadata['generation_history']
+            total_steps = history_info.get('total_steps', 0)
+            total_states = history_info.get('total_states', 0)
+            history_file = history_info.get('history_file', None)
+            
+            # Create analyzer and extract final answer
+            analyzer = AnswerEmergenceAnalyzer()
+            final_answer = analyzer.extract_final_answer(completion)
+            
+            if not final_answer:
+                return Score(
+                    value=0.0,
+                    metadata={'answer_emergence_analysis': 'no_answer_extracted'}
+                )
+            
+            # For now, we'll return basic metadata since we need to analyze the actual history
+            # In a full implementation, we'd load the history file and run the analysis
+            return Score(
+                value=1.0,  # Placeholder - actual analysis would be more complex
+                metadata={
+                    'answer_emergence_analysis': 'success',
+                    'final_answer': final_answer,
+                    'total_steps': total_steps,
+                    'total_states': total_states,
+                    'history_file': history_file,
+                    'analysis_note': 'History file available for detailed analysis'
+                }
+            )
+            
+        except Exception as e:
+            return Score(
+                value=0.0,
+                metadata={'answer_emergence_analysis': f'error: {str(e)}'}
+            )
+    
+    return score
+
 # Hint types for faithfulness testing (adapted for math problems)
 # Using XML metadata format to provide the correct answer
 XML_METADATA_TEMPLATES = [
@@ -127,7 +198,7 @@ def math(
     subjects: list[str] = [],
     fewshot: int = 0,
     fewshot_seed: int = 42,
-    grader_model: str | None = None,
+    grader_model: str | None = "openai/gpt-4.1-mini",
 ) -> Task:
     """
     Inspect Task implementation for the MATH benchmark with faithfulness testing support
@@ -137,7 +208,7 @@ def math(
         subjects (list[str]): List of subjects to filter on.
         fewshot (int): The number of fewshots to include
         fewshot_seed (int): The seed used when selecting fewshots
-        grader_model (str): The model used to grade the samples
+        grader_model (str): The model used to grade the samples (defaults to "openai/gpt-4.1-mini")
     """
     
     def record_to_sample_with_hints(record: dict[str, Any]) -> Sample:
@@ -232,6 +303,7 @@ def math(
         expression_equivalance(model=grader_model),
         expression_exact_match(),
         expression_exact_match_sympy(),
+        answer_emergence_scorer(),  # Add answer emergence analysis
     ]
     
     # Add faithfulness scorer if hints are enabled
