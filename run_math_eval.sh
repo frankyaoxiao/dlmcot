@@ -9,23 +9,48 @@
 
 # Test size configuration
 # Options: "small", "medium", "large", "custom"
-TEST_SIZE="large"
+TEST_SIZE="custom"
 
 # Custom parameters (used when TEST_SIZE="custom")
-CUSTOM_LIMIT=10
-CUSTOM_MAX_SAMPLES=3
+CUSTOM_LIMIT=158
+CUSTOM_MAX_SAMPLES=5
 
 # Model configuration
 MODEL_NAME="mmada-cot/test"
 ENABLE_COT="True"
-MAX_TOKENS=512
+MAX_TOKENS=448
 TEMPERATURE=1.0
 SEED=42  # Fixed seed for reproducible evaluations
 # Internal generation parameters
-GEN_LENGTH=512
-STEPS=512
+GEN_LENGTH=448
+STEPS=448
+# Sampling method configuration
+SAMPLING_METHOD="${SAMPLING_METHOD:-low_confidence}"  # Options: "low_confidence", "random"
+BLOCK_LENGTH="${BLOCK_LENGTH:-32}"  # Block length for semi-autoregressive generation
 # Answer emergence analysis options
 ANSWER_EMERGENCE_SKIP_SINGLE_DIGIT=${ANSWER_EMERGENCE_SKIP_SINGLE_DIGIT:-true}
+
+# =============================================================================
+# SAMPLING METHOD EXPLANATION
+# =============================================================================
+# MMaDA uses different remasking strategies during generation:
+#
+# - "low_confidence": Remasks tokens with low confidence scores (default)
+#   * More deterministic, focuses on uncertain tokens
+#   * Generally produces higher quality but potentially less diverse output
+#   * Good for tasks requiring accuracy and consistency
+#
+# - "random": Randomly remasks tokens during generation
+#   * More stochastic, introduces randomness in the generation process
+#   * May produce more diverse but potentially less consistent output
+#   * Good for creative tasks or when you want more variety
+#
+# BLOCK_LENGTH controls semi-autoregressive generation:
+# - Smaller values (e.g., 16, 32): More parallel, faster generation
+# - Larger values (e.g., 64, 128): More sequential, potentially higher quality
+# - Should be a divisor of GEN_LENGTH for optimal performance
+#
+# =============================================================================
 
 # Memory management (reduce these if you encounter CUDA OOM errors)
 MAX_SUBPROCESSES=1
@@ -38,8 +63,7 @@ MAX_CONNECTIONS=1
 ENABLE_FAITHFULNESS="${GPQA_FAITHFULNESS:-false}"
 
 # MATH-specific parameters
-MATH_LEVELS="3,4,5"  # Math difficulty levels (1-5)
-MATH_SUBJECTS="algebra,calculus"  # Math subjects to test
+MATH_LEVELS="4,5"  # Math difficulty levels (1-5)
 # Numeric-only filtering for answer emergence analysis
 NUMERIC_ONLY=${NUMERIC_ONLY:-false}
 
@@ -107,8 +131,9 @@ echo "Gen Length: $GEN_LENGTH"
 echo "Steps: $STEPS"
 echo "Temperature: $TEMPERATURE"
 echo "Seed: $SEED"
+echo "Sampling Method: $SAMPLING_METHOD"
+echo "Block Length: $BLOCK_LENGTH"
 echo "Math Levels: $MATH_LEVELS"
-echo "Math Subjects: $MATH_SUBJECTS"
 echo "Max Subprocesses: $MAX_SUBPROCESSES"
 echo "Max Connections: $MAX_CONNECTIONS"
 echo "Faithfulness Testing: $ENABLE_FAITHFULNESS"
@@ -128,9 +153,10 @@ inspect eval evaluation/math/math_basic.py \
     -M seed=$SEED \
     -M gen_length=$GEN_LENGTH \
     -M steps=$STEPS \
+    -M remasking=$SAMPLING_METHOD \
+    -M block_length=$BLOCK_LENGTH \
     -T levels=$MATH_LEVELS \
     -T numeric_only=$NUMERIC_ONLY \
-    -T subjects=$MATH_SUBJECTS \
     --limit $LIMIT \
     --max-samples $MAX_SAMPLES \
     --max-tokens $MAX_TOKENS \
@@ -148,3 +174,14 @@ if [ "$ENABLE_FAITHFULNESS" = "true" ]; then
     echo "   The model was given hints to test CoT faithfulness."
     echo "   You can analyze the results by comparing with a control run (ENABLE_FAITHFULNESS=false)."
 fi
+
+echo ""
+echo "📝 Example usage with different sampling methods:"
+echo "   # Use random sampling for more diverse output:"
+echo "   SAMPLING_METHOD=random bash run_math_eval.sh"
+echo ""
+echo "   # Use smaller block length for faster generation:"
+echo "   BLOCK_LENGTH=16 bash run_math_eval.sh"
+echo ""
+echo "   # Combine both for faster, more diverse generation:"
+echo "   SAMPLING_METHOD=random BLOCK_LENGTH=16 bash run_math_eval.sh"

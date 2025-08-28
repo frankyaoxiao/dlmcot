@@ -173,12 +173,26 @@ class MMadaModelAPI(ModelAPI):
             if isinstance(response, tuple) and len(response) == 4:
                 response_content, history, tokenizer, history_file = response
                 print(f"DEBUG: History saved to: {history_file}")
-                print(f"DEBUG: History contains {len(history['states'])} states across {history['summary']['total_steps']} steps")
+                if history and 'states' in history:
+                    print(f"DEBUG: History contains {len(history['states'])} states across {history['summary']['total_steps']} steps")
+                else:
+                    print(f"DEBUG: History object doesn't contain expected keys")
             else:
+                # Check if this is an error response
+                if isinstance(response, str) and response.startswith("Generation failed:"):
+                    print(f"ERROR: Generation failed: {response}")
+                    return response, None, None  # Return error message with None for history and history_file
+                
                 # Fallback for old format
                 response_content = response
+                history = None
                 history_file = None
                 print(f"DEBUG: No history saved (old format)")
+            
+            # Check if we have an error response
+            if isinstance(response_content, str) and response_content.startswith("Generation failed:"):
+                print(f"ERROR: Generation failed: {response_content}")
+                return response_content, None, None  # Return error message with None for history and history_file
             
             print(f"DEBUG: Raw response: '{response_content}'")
             print(f"DEBUG: Response length: {len(response_content)}")
@@ -214,16 +228,16 @@ class MMadaModelAPI(ModelAPI):
             
             # Ensure we have a valid response
             if not response_content or response_content.strip() == "":
-                return "Error: Empty response generated"
+                return "Error: Empty response generated", None, None  # Always return 3 values
             
             print(f"DEBUG: Final result: '{response_content}'")
-            return response_content, history if 'history' in locals() else None, history_file
+            return response_content, history, history_file
             
         except Exception as e:
             print(f"Error in MMaDA generation: {e}")
             import traceback
             traceback.print_exc()
-            return f"Error during generation: {str(e)}"
+            return f"Error during generation: {str(e)}", None, None  # Always return 3 values
         finally:
             # Proactively free CUDA cache between samples to avoid incremental OOM
             try:
@@ -271,6 +285,7 @@ class MMadaModelAPI(ModelAPI):
         steps = gen_length
         
         print(f"DEBUG: Generation params: gen_length={gen_length}, temperature={temperature}, steps={steps}, enable_cot={enable_cot}, seed={seed}")
+        print(f"DEBUG: Sampling params: remasking={remasking}, block_length={block_length}")
         
         # Generate response
         response_content, history, history_file = await self._generate_response(
@@ -286,19 +301,51 @@ class MMadaModelAPI(ModelAPI):
             seed=seed
         )
         
+        # Check if generation failed
+        if isinstance(response_content, str) and response_content.startswith("Generation failed:"):
+            print(f"ERROR: Generation failed in main generate method: {response_content}")
+            
+            # Extract specific error information for better user feedback
+            error_details = response_content
+            if history and isinstance(history, dict) and 'error' in history:
+                error_type = history.get('error', 'Unknown')
+                error_message = history.get('message', 'No details')
+                if error_type == 'CUDA_OOM':
+                    error_details = f"CUDA Out of Memory Error: {error_message}. Try reducing generation length or using a smaller model."
+                elif error_type == 'GENERATION_ERROR':
+                    error_details = f"Generation Error: {error_message}. This may be due to model or input issues."
+            
+            # Return an error ModelOutput
+            error_message = ChatMessageAssistant(
+                content=f"Error: {error_details}",
+                model=self.model_name
+            )
+            error_choice = ChatCompletionChoice(
+                message=error_message,
+                stop_reason="error"
+            )
+            return ModelOutput(
+                choices=[error_choice],
+                model=self.model_name,
+                metadata={'error': True, 'error_message': error_details, 'error_type': history.get('error', 'Unknown') if history and isinstance(history, dict) else 'Unknown'}
+            )
+        
         print(f"DEBUG: Generated response: '{response_content}'")
         print(f"DEBUG: Response length: {len(response_content)}")
         print(f"DEBUG: History object type: {type(history)}")
         print(f"DEBUG: History is None: {history is None}")
-        if history is not None:
+        if history is not None and isinstance(history, dict):
             print(f"DEBUG: History keys: {list(history.keys())}")
-            print(f"DEBUG: History summary: {history.get('summary', 'No summary')}")
-            print(f"DEBUG: History states count: {len(history.get('states', []))}")
+            if 'error' not in history:
+                print(f"DEBUG: History summary: {history.get('summary', 'No summary')}")
+                print(f"DEBUG: History states count: {len(history.get('states', []))}")
+            else:
+                print(f"DEBUG: History contains error: {history['error']}")
         print(f"DEBUG: History file: {history_file}")
         
         # Store history information in metadata for answer emergence analysis
         metadata = {}
-        if history is not None:
+        if history is not None and isinstance(history, dict) and 'error' not in history:
             metadata['generation_history'] = {
                 'total_steps': history.get('summary', {}).get('total_steps', 0),
                 'total_states': len(history.get('states', [])),
@@ -307,6 +354,8 @@ class MMadaModelAPI(ModelAPI):
             print(f"DEBUG: Stored history metadata: {metadata['generation_history']}")
         else:
             print(f"DEBUG: No history to store in metadata")
+            if history and isinstance(history, dict) and 'error' in history:
+                print(f"DEBUG: History contains error: {history['error']}")
         
         print(f"DEBUG: Final metadata: {metadata}")
         
