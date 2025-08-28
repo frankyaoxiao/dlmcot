@@ -422,7 +422,7 @@ def save_generation_history_to_file(history, tokenizer, output_file=None):
             pred_generated = pred_tokens[prompt_len:]
             if any(t != history['mask_id'] for t in pred_generated):
                 pred_text = tokenizer.decode(pred_generated, skip_special_tokens=True)
-                f.write(f"  Generated so far: {repr(pred_text)}\n")
+                f.write(f"  Model prediction: {repr(pred_text)}\n")
             
             # Show remasking decision
             f.write(f"  Tokens finalized: {remask_decision['tokens_finalized']}\n")

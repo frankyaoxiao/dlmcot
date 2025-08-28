@@ -111,6 +111,61 @@ class AnswerEmergenceAnalyzer:
             logger.error(f"Error scanning history file '{history_file}': {e}")
             return None
 
+    def find_numeric_emergence_in_generated_so_far(self, history_file: str, numeric_answer: str) -> Optional[Tuple[int, int, float]]:
+        """Scan the text history file to find earliest step where numeric answer first appears in 'Generated so far' text.
+        This accounts for the 1-step lag where 'Generated so far' shows what was finalized up to the previous step.
+        Returns (emergence_step, total_steps, completion_percentage) or None.
+        """
+        try:
+            # Normalize target search string (strip whitespace)
+            target = numeric_answer.strip()
+            earliest_step: Optional[int] = None
+            total_steps: Optional[int] = None
+
+            # Patterns in the text report
+            step_header_re = re.compile(r"^Step\s+(\d+)\s*\(.*\):\s*$")
+            total_steps_re = re.compile(r"^Total Steps:\s*(\d+)\s*$")
+            # Only consider 'Generated so far' lines (not 'Finalized text')
+            generated_so_far_re = re.compile(r"^\s{2}Generated so far:\s*(.*)$")
+            # Build a boundary-aware pattern for the exact numeric target (avoid matching '8' inside '180')
+            target_re = re.compile(rf"(?<![0-9]){re.escape(target)}(?![0-9])")
+
+            with open(history_file, 'r', encoding='utf-8') as f:
+                current_step: Optional[int] = None
+                for line in f:
+                    if total_steps is None:
+                        m_tot = total_steps_re.match(line)
+                        if m_tot:
+                            try:
+                                total_steps = int(m_tot.group(1))
+                            except Exception:
+                                pass
+                    m = step_header_re.match(line)
+                    if m:
+                        try:
+                            current_step = int(m.group(1))
+                        except Exception:
+                            current_step = None
+                        continue
+                    # When within a step, only consider 'Generated so far' lines
+                    if current_step is not None:
+                        mg = generated_so_far_re.match(line)
+                        if mg:
+                            text_fragment = mg.group(1)
+                            if target_re.search(text_fragment):
+                                if earliest_step is None:
+                                    earliest_step = current_step
+                                    # We can break early if we found the first occurrence, but
+                                    # keep scanning to capture total_steps if not yet found
+                # End for
+            if earliest_step is None or total_steps is None or total_steps <= 0:
+                return None
+            completion_percentage = (earliest_step / total_steps) * 100.0
+            return (earliest_step, total_steps, completion_percentage)
+        except Exception as e:
+            logger.error(f"Error scanning history file '{history_file}' for 'Generated so far': {e}")
+            return None
+
     # Existing token-based methods (kept for future)
     def tokenize_answer(self, answer_text: str) -> List[int]:
         if self.tokenizer is None:

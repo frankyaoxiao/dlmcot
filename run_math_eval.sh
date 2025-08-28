@@ -12,7 +12,7 @@
 TEST_SIZE="custom"
 
 # Custom parameters (used when TEST_SIZE="custom")
-CUSTOM_LIMIT=158
+CUSTOM_LIMIT=200
 CUSTOM_MAX_SAMPLES=5
 
 # Model configuration
@@ -26,9 +26,19 @@ GEN_LENGTH=448
 STEPS=448
 # Sampling method configuration
 SAMPLING_METHOD="${SAMPLING_METHOD:-low_confidence}"  # Options: "low_confidence", "random"
-BLOCK_LENGTH="${BLOCK_LENGTH:-32}"  # Block length for semi-autoregressive generation
+BLOCK_LENGTH=64  # Block length for semi-autoregressive generation
+
+# Emergence scorer configuration
+USE_GENERATED_SO_FAR_EMERGENCE=true  # Options: "true", "false"
 # Answer emergence analysis options
-ANSWER_EMERGENCE_SKIP_SINGLE_DIGIT=${ANSWER_EMERGENCE_SKIP_SINGLE_DIGIT:-true}
+ANSWER_EMERGENCE_SKIP_SINGLE_DIGIT=${ANSWER_EMERGENCE_SKIP_SINGLE_DIGIT:-false}
+
+# Emergence Scorer Method:
+# - USE_GENERATED_SO_FAR_EMERGENCE=false (default): Find first occurrence of answer in any generated text
+# - USE_GENERATED_SO_FAR_EMERGENCE=true: Find first occurrence of answer in "Generated so far" text only
+#   This accounts for the 1-step lag where "Generated so far" shows what was finalized up to the previous step.
+#   Useful for single-block generation (block_length = gen_length) to track when answers first appear
+#   in the finalized text rather than in model predictions.
 
 # =============================================================================
 # SAMPLING METHOD EXPLANATION
@@ -63,9 +73,9 @@ MAX_CONNECTIONS=1
 ENABLE_FAITHFULNESS="${GPQA_FAITHFULNESS:-false}"
 
 # MATH-specific parameters
-MATH_LEVELS="4,5"  # Math difficulty levels (1-5)
+MATH_LEVELS="[3,4]"  # Math difficulty levels (1-5)
 # Numeric-only filtering for answer emergence analysis
-NUMERIC_ONLY=${NUMERIC_ONLY:-false}
+NUMERIC_ONLY=true
 
 # =============================================================================
 # VALIDATION
@@ -133,6 +143,7 @@ echo "Temperature: $TEMPERATURE"
 echo "Seed: $SEED"
 echo "Sampling Method: $SAMPLING_METHOD"
 echo "Block Length: $BLOCK_LENGTH"
+echo "Emergence Scorer Method: $USE_GENERATED_SO_FAR_EMERGENCE"
 echo "Math Levels: $MATH_LEVELS"
 echo "Max Subprocesses: $MAX_SUBPROCESSES"
 echo "Max Connections: $MAX_CONNECTIONS"
@@ -157,6 +168,7 @@ inspect eval evaluation/math/math_basic.py \
     -M block_length=$BLOCK_LENGTH \
     -T levels=$MATH_LEVELS \
     -T numeric_only=$NUMERIC_ONLY \
+    -T use_generated_so_far_emergence=$USE_GENERATED_SO_FAR_EMERGENCE \
     --limit $LIMIT \
     --max-samples $MAX_SAMPLES \
     --max-tokens $MAX_TOKENS \
@@ -185,3 +197,9 @@ echo "   BLOCK_LENGTH=16 bash run_math_eval.sh"
 echo ""
 echo "   # Combine both for faster, more diverse generation:"
 echo "   SAMPLING_METHOD=random BLOCK_LENGTH=16 bash run_math_eval.sh"
+echo ""
+echo "   # Single-block generation (full autoregressive) with 'Generated so far' emergence scoring:"
+echo "   BLOCK_LENGTH=448 USE_GENERATED_SO_FAR_EMERGENCE=true bash run_math_eval.sh"
+echo ""
+echo "   # Test with small dataset:"
+echo "   TEST_SIZE=small BLOCK_LENGTH=448 USE_GENERATED_SO_FAR_EMERGENCE=true bash run_math_eval.sh"
