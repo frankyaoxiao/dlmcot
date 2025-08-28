@@ -9,7 +9,7 @@
 
 # Test size configuration
 # Options: "small", "medium", "large", "custom"
-TEST_SIZE="custom"
+TEST_SIZE="${TEST_SIZE:-custom}"
 
 # Custom parameters (used when TEST_SIZE="custom")
 CUSTOM_LIMIT=200
@@ -169,6 +169,7 @@ inspect eval evaluation/math/math_basic.py \
     -T levels=$MATH_LEVELS \
     -T numeric_only=$NUMERIC_ONLY \
     -T use_generated_so_far_emergence=$USE_GENERATED_SO_FAR_EMERGENCE \
+    -T dataset_seed=$SEED \
     --limit $LIMIT \
     --max-samples $MAX_SAMPLES \
     --max-tokens $MAX_TOKENS \

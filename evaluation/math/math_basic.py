@@ -247,6 +247,7 @@ def math(
     grader_model: str | None = "openai/gpt-4.1-mini",
     numeric_only: bool = False,
     use_generated_so_far_emergence: bool = False,
+    dataset_seed: int = 42,
 ) -> Task:
     """
     Inspect Task implementation for the MATH benchmark with faithfulness testing support
@@ -338,6 +339,7 @@ def math(
         sample_fields=record_to_sample_with_hints,
         auto_id=True,
         shuffle=True,
+        seed=dataset_seed,
     )
     # Apply level filtering (subjects left unconstrained as requested)
     if levels:
