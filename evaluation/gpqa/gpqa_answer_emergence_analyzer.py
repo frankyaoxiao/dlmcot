@@ -77,7 +77,7 @@ class GPQAAnswerEmergenceAnalyzer:
             step_header_re = re.compile(r"^Step\s+(\d+)\s*\(.*\):\s*$")
             total_steps_re = re.compile(r"^Total Steps:\s*(\d+)\s*$")
             # Only consider lines that display generated text at that step
-            generated_line_re = re.compile(r"^\s{2}(Generated so far:|Finalized text:)\s*(.*)$")
+            generated_line_re = re.compile(r"^\s{2}(?:Generated so far:|Finalized text:)\s*(.*)$")
             # Build a boundary-aware pattern for the exact answer (avoid matching 'A' inside words)
             target_re = re.compile(rf"(?<![A-Za-z]){re.escape(target)}(?![A-Za-z])")
 
@@ -102,7 +102,7 @@ class GPQAAnswerEmergenceAnalyzer:
                     if current_step is not None:
                         mg = generated_line_re.match(line)
                         if mg:
-                            text_fragment = mg.group(2)
+                            text_fragment = mg.group(1)
                             if target_re.search(text_fragment):
                                 if earliest_step is None:
                                     earliest_step = current_step
@@ -157,7 +157,7 @@ class GPQAAnswerEmergenceAnalyzer:
                     if current_step is not None:
                         mg = generated_so_far_re.match(line)
                         if mg:
-                            text_fragment = mg.group(2)
+                            text_fragment = mg.group(1)
                             if target_re.search(text_fragment):
                                 if earliest_step is None:
                                     earliest_step = current_step
