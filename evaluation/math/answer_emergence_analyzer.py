@@ -39,9 +39,16 @@ class AnswerEmergenceAnalyzer:
             final_answer = matches[-1].strip()
             logger.info(f"Extracted final answer: '{final_answer}'")
             return final_answer
-        else:
-            logger.warning(f"No answer found in completion: {completion_text[:100]}...")
-            return None
+        
+        # If no ANSWER: format found, check if the completion is just a number
+        # This catches cases where the model outputs just "3", "7.5", "-2", etc.
+        stripped_completion = completion_text.strip()
+        if self.numeric_pattern.match(stripped_completion):
+            logger.info(f"Extracted final answer from standalone number: '{stripped_completion}'")
+            return stripped_completion
+        
+        logger.warning(f"No answer found in completion: {completion_text[:100]}...")
+        return None
     
     def is_strict_numeric(self, answer_text: str) -> bool:
         """Return True if answer is strictly numeric (int or float)."""

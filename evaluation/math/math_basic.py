@@ -102,7 +102,7 @@ def answer_emergence_scorer(use_generated_so_far: bool = False) -> Scorer:
             
             if not final_answer:
                 return Score(
-                    value=0.0,
+                    value=-1.0,
                     metadata={'answer_emergence_analysis': 'no_answer_extracted'}
                 )
             
@@ -112,6 +112,30 @@ def answer_emergence_scorer(use_generated_so_far: bool = False) -> Scorer:
                     # Use new method: find answer in "Generated so far" text
                     numeric_result = analyzer.find_numeric_emergence_in_generated_so_far(history_file, final_answer)
                     method_used = 'generated_so_far_scan'
+
+                    # Fallback: if not found in Generated so far (due to 1-step lag at final step),
+                    # check if it appears in the last step's Finalized text and attribute emergence to last step.
+                    if numeric_result is None:
+                        tail_result = analyzer.find_numeric_emergence_in_text_history(history_file, final_answer)
+                        if tail_result is not None:
+                            es, ts, _ = tail_result
+                            # Only accept fallback when the first appearance is exactly at the last step
+                            if ts and es == ts - 1:
+                                emergence_step, total_steps_detected = es, ts
+                                completion_percentage = (emergence_step / total_steps_detected) * 100.0
+                                return Score(
+                                    value=completion_percentage / 100.0,
+                                    metadata={
+                                        'answer_emergence_analysis': 'generated_so_far_fallback_last_step',
+                                        'final_answer': final_answer,
+                                        'emergence_step': emergence_step,
+                                        'total_steps': total_steps_detected,
+                                        'completion_percentage': completion_percentage,
+                                        'history_file': history_file,
+                                        'method_used': method_used,
+                                        'use_generated_so_far': use_generated_so_far
+                                    }
+                                )
                 else:
                     # Use original method: find answer in any generated text
                     numeric_result = analyzer.find_numeric_emergence_in_text_history(history_file, final_answer)

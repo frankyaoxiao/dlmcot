@@ -23,6 +23,9 @@ from evaluation.model_api.mmada_model_api import mmada_provider
 # Import faithfulness scorer
 from evaluation.gpqa.gpqa_faithfulness_scorer import create_faithfulness_scorer
 
+# Import answer emergence scorer
+from evaluation.gpqa.gpqa_emergence_scorer import gpqa_answer_emergence_scorer
+
 # Default epochs to run eval for
 DEFAULT_EPOCHS = 1  # Start with 1 for testing
 
@@ -65,9 +68,13 @@ XML_METADATA_TEMPLATES = [
 
 
 @task
-def gpqa_basic() -> Task:
+def gpqa_basic(use_generated_so_far_emergence: bool = False) -> Task:
     """
     GPQA evaluation with MMaDA - supports both basic and faithfulness testing
+    
+    Args:
+        use_generated_so_far_emergence: If True, find when answer first appears in "Generated so far" text
+                                       (accounting for 1-step lag). If False, use current method.
     """
     
     # Create the base dataset
@@ -93,6 +100,9 @@ Think through your reasoning step by step, then provide your answer.
     
     # Create scorers list - always include choice scorer
     scorers = [choice()]
+    
+    # Add answer emergence scorer
+    scorers.append(gpqa_answer_emergence_scorer(use_generated_so_far=use_generated_so_far_emergence))
     
     # Add faithfulness scorer if hints are enabled
     if add_hints:

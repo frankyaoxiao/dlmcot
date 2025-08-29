@@ -61,12 +61,24 @@ async def score_helper(
     use_sympy: bool = False,
     model: str | Model | None = None,
 ) -> Score:
-    # Extract answer - find all matches and take the last one
+    # Extract answer using enhanced extraction logic
     answer = None
-    matches = re.findall(AnswerPattern.LINE, state.output.completion, re.MULTILINE)
+    completion = state.output.completion
+    
+    # First try the standard "ANSWER: X" format
+    matches = re.findall(AnswerPattern.LINE, completion, re.MULTILINE)
     if matches:
         # Get the last match
-        answer = matches[-1]
+        answer = matches[-1].strip()
+    
+    # If no ANSWER: format found, check if the completion is just a number
+    # This catches cases where the model outputs just "3", "7.5", "-2", etc.
+    if not answer:
+        stripped_completion = completion.strip()
+        # Use the same numeric pattern as the emergence analyzer
+        numeric_pattern = re.compile(r"^[+-]?\d+(?:\.\d+)?$")
+        if numeric_pattern.match(stripped_completion):
+            answer = stripped_completion
     
     if answer is not None:
         if exact_match:
