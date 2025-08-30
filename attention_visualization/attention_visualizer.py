@@ -154,15 +154,12 @@ class AttentionVisualizer:
                         # If we don't have enough heads, use the first one
                         head_weights = attention_weights[0]
                     
-                    # Choose color palette based on head index for diversity
-                    color_palette = color_palettes[head_idx % len(color_palettes)]
-                    
-                    # Create seaborn heatmap
+                    # Create seaborn heatmap with consistent red color scheme
                     sns.heatmap(
                         head_weights,
                         ax=ax,
                         cmap=color_palette,
-                        cbar=False,  # We'll add a single colorbar later
+                        cbar=False,  # No colorbar to avoid overlapping
                         square=True,
                         xticklabels=False,
                         yticklabels=False,
@@ -186,16 +183,9 @@ class AttentionVisualizer:
                     col_idx = i % cols
                     axes[row_idx, col_idx].set_visible(False)
                 
-                # Add overall title
-                fig.suptitle(f'Layer {layer_num} - All {n_heads} Attention Heads (Step {step})', 
+                # Add simple title with just layer and step numbers
+                fig.suptitle(f'Layer {layer_num} - Step {step}', 
                             fontsize=16, fontweight='bold', y=0.98)
-                
-                # Add a single colorbar for all plots
-                if n_heads > 0:
-                    # Get the last heatmap for colorbar reference
-                    last_ax = axes[-1, -1]
-                    cbar = fig.colorbar(last_ax.collections[0], ax=axes, shrink=0.8, aspect=30)
-                    cbar.set_label('Attention Weight', fontsize=12, rotation=270, labelpad=20)
                 
                 # Adjust layout to prevent overlapping
                 plt.tight_layout()
@@ -435,9 +425,9 @@ class AttentionVisualizer:
                         steps.add(data['step'])
             
             # Only create plots for key steps to avoid too many files
-            key_steps = sorted(steps)[::16]  # Every 16th step to reduce file count
-            if len(key_steps) > 8:  # Limit to 8 key steps
-                key_steps = key_steps[:8]
+            key_steps = sorted(steps)[::64]  # Every 64th step to reduce file count
+            if len(key_steps) > 4:  # Limit to 4 key steps
+                key_steps = key_steps[:4]
             
             for step in key_steps:
                 try:

@@ -20,13 +20,14 @@ def main():
                        help="Remasking strategy (default: low_confidence)")
     parser.add_argument("--enable_cot", action="store_true", help="Enable Chain-of-Thought reasoning")
     parser.add_argument("--save_history", action="store_true", help="Save detailed generation history to file")
+    parser.add_argument("--visualize_attention", action="store_true", help="Enable attention visualization and capture attention weights")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for deterministic generation (default: None)")
     
     args = parser.parse_args()
     
     try:
         if args.save_history:
-            generated_text, history, tokenizer, history_file = generate_text(
+            result = generate_text(
                 args.prompt, 
                 gen_length=args.gen_length, 
                 steps=args.steps, 
@@ -36,11 +37,26 @@ def main():
                 remasking=args.remasking, 
                 save_history=True, 
                 enable_cot=args.enable_cot,
-                seed=args.seed
+                seed=args.seed,
+                visualize_attention=args.visualize_attention
             )
-            print(f"Generated text with history:\n{generated_text}")
-            print(f"\nHistory saved with {len(history['states'])} states")
-            print(f"History file saved to: {history_file}")
+            # Handle different return types based on attention visualization
+            if args.visualize_attention and len(result) == 5:
+                generated_text, history, tokenizer, history_file, attention_maps = result
+                print(f"Generated text with history and attention visualization:\n{generated_text}")
+                print(f"\nHistory saved with {len(history['states'])} states")
+                print(f"History file saved to: {history_file}")
+                print(f"Attention maps captured from {len(attention_maps)} modules")
+                
+                # Print attention summary
+                if attention_maps:
+                    total_attention_captures = sum(len(data_list) for data_list in attention_maps.values())
+                    print(f"Total attention captures: {total_attention_captures}")
+            else:
+                generated_text, history, tokenizer, history_file = result
+                print(f"Generated text with history:\n{generated_text}")
+                print(f"\nHistory saved with {len(history['states'])} states")
+                print(f"History file saved to: {history_file}")
             
             # Print summary statistics
             summary = history['summary']

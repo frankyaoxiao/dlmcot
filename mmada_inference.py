@@ -131,7 +131,7 @@ def get_num_transfer_tokens(mask_index, steps):
 
 @torch.no_grad()
 def mmada_generate(model, prompt, steps=128, gen_length=128, block_length=128, temperature=0.,
-                   cfg_scale=0., remasking='low_confidence', mask_id=126336, attention_mask=None, save_history=False, seed=None):
+                   cfg_scale=0., remasking='low_confidence', mask_id=126336, attention_mask=None, save_history=False, seed=None, visualize_attention=False):
     """
     Generate text using MMaDA's masked diffusion process.
     
@@ -165,6 +165,23 @@ def mmada_generate(model, prompt, steps=128, gen_length=128, block_length=128, t
         # Set deterministic mode for CUDA operations
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+    
+    # Initialize attention hook if visualization is enabled
+    attention_hook = None
+    if visualize_attention:
+        try:
+            from attention_visualization.attention_hook import AttentionHook
+            attention_hook = AttentionHook(model)
+            attention_hook.register_hooks()
+            print("✓ Attention visualization hooks registered")
+        except ImportError as e:
+            print(f"Warning: Could not import attention visualization: {e}")
+            print("Attention visualization will be disabled")
+            visualize_attention = False
+        except Exception as e:
+            print(f"Warning: Failed to register attention hooks: {e}")
+            print("Attention visualization will be disabled")
+            visualize_attention = False
     
     if attention_mask is not None and 0.0 in attention_mask:
         attention_bias = (attention_mask[:, :, None] & attention_mask[:, None, :]).bool().unsqueeze(1)
@@ -226,6 +243,10 @@ def mmada_generate(model, prompt, steps=128, gen_length=128, block_length=128, t
             })
         
         for i in range(steps_per_block):
+            # Set attention hook context if visualization is enabled
+            if attention_hook is not None:
+                attention_hook.set_generation_context(global_step, num_block)
+            
             if save_history:
                 # Save complete state
                 history['states'].append(x.clone())
@@ -302,6 +323,13 @@ def mmada_generate(model, prompt, steps=128, gen_length=128, block_length=128, t
             x[transfer_index] = x0[transfer_index]
             global_step += 1
 
+    # Clean up attention hooks if visualization was enabled
+    if attention_hook is not None:
+        # Print conversion summary before cleanup
+        attention_hook.print_conversion_summary()
+        attention_hook.remove_hooks()
+        print("✓ Attention visualization hooks removed")
+    
     if save_history:
         # Save final state
         history['states'].append(x.clone())
@@ -314,8 +342,17 @@ def mmada_generate(model, prompt, steps=128, gen_length=128, block_length=128, t
             'finalized_tokens_count': len(history['finalized_at_step']),
             'generation_completed': True
         }
-
-    return (x, history) if save_history else x
+        
+        # Add attention maps if visualization was enabled
+        if visualize_attention and attention_hook is not None:
+            attention_maps = attention_hook.get_attention_maps()
+            history['attention_maps'] = attention_maps
+            print(f"✓ Captured attention maps from {len(attention_maps)} modules")
+            return (x, history, attention_maps)
+        
+        return (x, history)
+    
+    return x
 
 def save_generation_history_to_file(history, tokenizer, output_file=None):
     """
@@ -461,7 +498,7 @@ def save_generation_history_to_file(history, tokenizer, output_file=None):
 
 
 def generate_text(prompt, gen_length=128, steps=128, block_length=32, temperature=1.0, 
-                  cfg_scale=0.0, remasking='low_confidence', save_history=False, use_chat_template=True, enable_cot=False, seed=None):
+                  cfg_scale=0.0, remasking='low_confidence', save_history=False, use_chat_template=True, enable_cot=False, seed=None, visualize_attention=False):
     """Generate text using MMaDA model."""
     _load_model()
     
@@ -507,18 +544,29 @@ ANSWER: A
         raise RuntimeError(f"Tokenization failed: {e}")
     
     if save_history:
-        generated_ids, history = mmada_generate(
+        result = mmada_generate(
             _model, input_ids, steps=steps, gen_length=gen_length, 
             block_length=block_length, temperature=temperature,
-            cfg_scale=cfg_scale, remasking=remasking, save_history=True, seed=seed
+            cfg_scale=cfg_scale, remasking=remasking, save_history=True, seed=seed, visualize_attention=visualize_attention
         )
+        
+        # Handle different return types based on attention visualization
+        if visualize_attention and len(result) == 3:
+            generated_ids, history, attention_maps = result
+        else:
+            generated_ids, history = result
+            attention_maps = None
+        
         generated_text = _tokenizer.batch_decode(generated_ids[:, input_ids.shape[1]:], skip_special_tokens=True)[0]
         
         # Save generation history to text file for human inspection
         history_file = save_generation_history_to_file(history, _tokenizer)
         
-        # Return the history dictionary directly for immediate analysis
-        return generated_text, history, _tokenizer, history_file
+        # Return the appropriate data based on what was captured
+        if attention_maps is not None:
+            return generated_text, history, _tokenizer, history_file, attention_maps
+        else:
+            return generated_text, history, _tokenizer, history_file
     else:
         generated_ids = mmada_generate(
             _model, input_ids, steps=steps, gen_length=gen_length,
