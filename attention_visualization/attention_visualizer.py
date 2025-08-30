@@ -485,20 +485,51 @@ class AttentionVisualizer:
                 
                 # Create causal attention summary
                 causal_summary = causal_analysis.get('overall_summary', {})
+                layer_analysis = causal_analysis.get('layer_causal_analysis', {})
+                
                 if causal_summary:
                     print(f"\n🎯 Causal Attention Summary:")
                     print(f"   Overall causal: {causal_summary.get('overall_causal_percentage', 0):.1f}%")
                     print(f"   Overall non-causal: {causal_summary.get('overall_non_causal_percentage', 0):.1f}%")
                     print(f"   Total layers analyzed: {causal_summary.get('total_layers', 0)}")
                     
+                    # Show layer-by-layer breakdown
+                    print(f"\n📊 Layer-by-Layer Causal Analysis:")
+                    print(f"   {'Layer':<25} {'Causal %':<10} {'Non-Causal %':<12} {'Mean Causal':<12} {'Mean Non-Causal':<15}")
+                    print(f"   {'-'*25} {'-'*10} {'-'*12} {'-'*12} {'-'*15}")
+                    
+                    # Sort layers by causal percentage
+                    sorted_layers = sorted(
+                        [(name, data) for name, data in layer_analysis.items()],
+                        key=lambda x: x[1]['causal_percentage'],
+                        reverse=True
+                    )
+                    
+                    for layer_name, layer_data in sorted_layers:
+                        # Extract layer number for cleaner display
+                        layer_num = layer_name.split('.')[-1] if '.' in layer_name else layer_name
+                        causal_pct = layer_data['causal_percentage']
+                        non_causal_pct = layer_data['non_causal_percentage']
+                        mean_causal = layer_data['mean_causal_strength']
+                        mean_non_causal = layer_data['mean_non_causal_strength']
+                        
+                        print(f"   Layer {layer_num:<20} {causal_pct:<10.1f} {non_causal_pct:<12.1f} {mean_causal:<12.3f} {mean_non_causal:<15.3f}")
+                    
                     # Show top and bottom layers
                     most_causal = causal_summary.get('layer_rankings', {}).get('most_causal', [])
                     least_causal = causal_summary.get('layer_rankings', {}).get('least_causal', [])
                     
-                    if most_causal:
-                        print(f"   Most causal layers: {', '.join(most_causal[:3])}")
-                    if least_causal:
-                        print(f"   Least causal layers: {', '.join(least_causal[:3])}")
+                    print(f"\n🏆 Top 3 Most Causal Layers:")
+                    for i, layer in enumerate(most_causal[:3], 1):
+                        layer_num = layer.split('.')[-1] if '.' in layer else layer
+                        pct = layer_analysis[layer]['causal_percentage']
+                        print(f"   {i}. Layer {layer_num}: {pct:.1f}% causal")
+                    
+                    print(f"\n🔽 Top 3 Least Causal Layers:")
+                    for i, layer in enumerate(least_causal[:3], 1):
+                        layer_num = layer.split('.')[-1] if '.' in layer else layer
+                        pct = layer_analysis[layer]['causal_percentage']
+                        print(f"   {i}. Layer {layer_num}: {pct:.1f}% causal")
                 
                 logger.info("Causal attention analysis completed and saved")
                 

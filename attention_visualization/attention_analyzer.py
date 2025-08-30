@@ -620,8 +620,23 @@ class AttentionAnalyzer:
                 continue
             
             # Analyze each step for this layer
+            # Estimate prompt length from the first step's sequence length
+            # This is a rough estimate - in practice, we'd need to get this from the tokenizer
+            estimated_prompt_length = 0
+            if step_data:
+                first_step_weights = list(step_data.values())[0]
+                if first_step_weights.ndim == 4:
+                    seq_len = first_step_weights.shape[2]
+                elif first_step_weights.ndim == 3:
+                    seq_len = first_step_weights.shape[1]
+                else:
+                    seq_len = 0
+                
+                # Rough estimate: assume prompt is about 20-30% of total sequence in early steps
+                estimated_prompt_length = max(0, min(seq_len // 4, seq_len // 3))
+            
             for step, attn_weights in step_data.items():
-                step_analysis = self._analyze_causal_attention_step(attn_weights, step)
+                step_analysis = self._analyze_causal_attention_step(attn_weights, step, estimated_prompt_length)
                 layer_analysis['step_analysis'][step] = step_analysis
                 
                 # Accumulate totals
@@ -657,13 +672,14 @@ class AttentionAnalyzer:
         logger.info("Causal attention analysis completed")
         return analysis
     
-    def _analyze_causal_attention_step(self, attn_weights: np.ndarray, step: int) -> Dict[str, Any]:
+    def _analyze_causal_attention_step(self, attn_weights: np.ndarray, step: int, prompt_length: int = 0) -> Dict[str, Any]:
         """
         Analyze causal attention patterns for a single step.
         
         Args:
             attn_weights: Attention weight matrix of shape [num_heads, seq_len, seq_len]
             step: Generation step number
+            prompt_length: Length of the prompt (to exclude prompt tokens as attending tokens)
             
         Returns:
             Dictionary containing step-level causal analysis
@@ -685,6 +701,7 @@ class AttentionAnalyzer:
             'step': step,
             'sequence_length': seq_len,
             'num_heads': num_heads,
+            'prompt_length': prompt_length,
             'causal_strength': 0.0,
             'non_causal_strength': 0.0,
             'causal_percentage': 0.0,
@@ -697,10 +714,15 @@ class AttentionAnalyzer:
             head_weights = attn_weights[head_idx]  # [seq_len, seq_len]
             
             # Calculate causal vs non-causal attention
+            # Only consider generated tokens as the attending token (key)
             causal_strength = 0.0
             non_causal_strength = 0.0
             
             for i in range(seq_len):
+                # Skip if this is a prompt token (we only care about generated tokens' attention)
+                if i < prompt_length:
+                    continue
+                    
                 for j in range(seq_len):
                     if j < i:  # Causal: token i attends to previous token j
                         causal_strength += head_weights[i, j]
@@ -765,6 +787,19 @@ class AttentionAnalyzer:
             }
         
         # Analyze each step
+        # Estimate prompt length (same logic as above)
+        estimated_prompt_length = 0
+        if attention_weights_list:
+            first_weights = attention_weights_list[0]
+            if first_weights.ndim == 4:
+                seq_len = first_weights.shape[2]
+            elif first_weights.ndim == 3:
+                seq_len = first_weights.shape[1]
+            else:
+                seq_len = 0
+            
+            estimated_prompt_length = max(0, min(seq_len // 4, seq_len // 3))
+        
         for attn_weights in attention_weights_list:
             if attn_weights.ndim == 4:
                 attn_weights = attn_weights[0]  # Remove batch dimension
@@ -779,10 +814,15 @@ class AttentionAnalyzer:
                 head_weights = attn_weights[head_idx]
                 
                 # Calculate causal vs non-causal attention for this head
+                # Only consider generated tokens as the attending token
                 causal_strength = 0.0
                 non_causal_strength = 0.0
                 
                 for i in range(seq_len):
+                    # Skip if this is a prompt token
+                    if i < estimated_prompt_length:
+                        continue
+                        
                     for j in range(seq_len):
                         if j < i:  # Causal
                             causal_strength += head_weights[i, j]
