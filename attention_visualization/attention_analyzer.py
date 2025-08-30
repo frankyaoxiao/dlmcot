@@ -439,6 +439,7 @@ class AttentionAnalyzer:
             'statistics': self.get_attention_statistics(),
             'attention_patterns': self.analyze_attention_patterns(),
             'token_influence': self.analyze_token_influence(prompt_length=50),  # Default prompt length
+            'causal_attention': self.analyze_causal_attention_patterns(),
             'summary': self._create_analysis_summary()
         }
         
@@ -551,3 +552,413 @@ class AttentionAnalyzer:
         summary['steps_covered'] = sorted(list(set(summary['steps_covered'])))
         
         return summary
+    
+    def analyze_causal_attention_patterns(self) -> Dict[str, Any]:
+        """
+        Analyze causal vs non-causal attention patterns across all layers.
+        
+        This method calculates the percentage of attention strength that is causal
+        (tokens attending to previous tokens) vs non-causal (tokens attending to
+        current/future tokens) for each layer, weighted by attention strength.
+        
+        Returns:
+            Dictionary containing causal attention analysis per layer
+        """
+        if 'causal_attention' in self.analysis_cache:
+            return self.analysis_cache['causal_attention']
+        
+        logger.info("Analyzing causal attention patterns...")
+        
+        analysis = {
+            'layer_causal_analysis': {},
+            'overall_summary': {},
+            'step_evolution': {}
+        }
+        
+        # Collect all unique layers and steps
+        layers = set()
+        steps = set()
+        
+        for module_name, data_list in self.attention_maps.items():
+            layers.add(module_name)
+            for data in data_list:
+                if 'step' in data:
+                    steps.add(data['step'])
+        
+        steps = sorted(list(steps))
+        
+        # Analyze each layer
+        for layer_name in layers:
+            layer_data = self.attention_maps[layer_name]
+            
+            if not layer_data:
+                continue
+            
+            # Initialize layer analysis
+            layer_analysis = {
+                'total_causal_strength': 0.0,
+                'total_non_causal_strength': 0.0,
+                'causal_percentage': 0.0,
+                'non_causal_percentage': 0.0,
+                'mean_causal_strength': 0.0,
+                'mean_non_causal_strength': 0.0,
+                'step_analysis': {},
+                'head_analysis': {}
+            }
+            
+            # Collect attention weights for this layer
+            attention_weights_list = []
+            step_data = {}
+            
+            for data in layer_data:
+                if 'attention_weights' in data:
+                    step = data.get('step', 0)
+                    step_data[step] = data['attention_weights']
+                    attention_weights_list.append(data['attention_weights'])
+            
+            if not attention_weights_list:
+                continue
+            
+            # Analyze each step for this layer
+            for step, attn_weights in step_data.items():
+                step_analysis = self._analyze_causal_attention_step(attn_weights, step)
+                layer_analysis['step_analysis'][step] = step_analysis
+                
+                # Accumulate totals
+                layer_analysis['total_causal_strength'] += step_analysis['causal_strength']
+                layer_analysis['total_non_causal_strength'] += step_analysis['non_causal_strength']
+            
+            # Calculate overall percentages for this layer
+            total_strength = layer_analysis['total_causal_strength'] + layer_analysis['total_non_causal_strength']
+            if total_strength > 0:
+                layer_analysis['causal_percentage'] = (layer_analysis['total_causal_strength'] / total_strength) * 100
+                layer_analysis['non_causal_percentage'] = (layer_analysis['total_non_causal_strength'] / total_strength) * 100
+                
+                # Calculate mean strengths
+                num_steps = len(layer_analysis['step_analysis'])
+                layer_analysis['mean_causal_strength'] = layer_analysis['total_causal_strength'] / num_steps
+                layer_analysis['mean_non_causal_strength'] = layer_analysis['total_non_causal_strength'] / num_steps
+            
+            # Analyze individual attention heads if available
+            if attention_weights_list:
+                layer_analysis['head_analysis'] = self._analyze_causal_attention_heads(attention_weights_list)
+            
+            analysis['layer_causal_analysis'][layer_name] = layer_analysis
+        
+        # Create overall summary
+        analysis['overall_summary'] = self._create_causal_attention_summary(analysis['layer_causal_analysis'])
+        
+        # Analyze step evolution
+        analysis['step_evolution'] = self._analyze_causal_attention_evolution(analysis['layer_causal_analysis'])
+        
+        # Cache the analysis
+        self.analysis_cache['causal_attention'] = analysis
+        
+        logger.info("Causal attention analysis completed")
+        return analysis
+    
+    def _analyze_causal_attention_step(self, attn_weights: np.ndarray, step: int) -> Dict[str, Any]:
+        """
+        Analyze causal attention patterns for a single step.
+        
+        Args:
+            attn_weights: Attention weight matrix of shape [num_heads, seq_len, seq_len]
+            step: Generation step number
+            
+        Returns:
+            Dictionary containing step-level causal analysis
+        """
+        # Handle different tensor shapes
+        if attn_weights.ndim == 4:
+            # [batch, num_heads, seq_len, seq_len]
+            attn_weights = attn_weights[0]  # Remove batch dimension
+        elif attn_weights.ndim == 3:
+            # [num_heads, seq_len, seq_len]
+            pass
+        else:
+            logger.warning(f"Unexpected attention weights shape: {attn_weights.shape}")
+            return {}
+        
+        num_heads, seq_len, _ = attn_weights.shape
+        
+        step_analysis = {
+            'step': step,
+            'sequence_length': seq_len,
+            'num_heads': num_heads,
+            'causal_strength': 0.0,
+            'non_causal_strength': 0.0,
+            'causal_percentage': 0.0,
+            'non_causal_percentage': 0.0,
+            'head_breakdown': {}
+        }
+        
+        # Analyze each attention head
+        for head_idx in range(num_heads):
+            head_weights = attn_weights[head_idx]  # [seq_len, seq_len]
+            
+            # Calculate causal vs non-causal attention
+            causal_strength = 0.0
+            non_causal_strength = 0.0
+            
+            for i in range(seq_len):
+                for j in range(seq_len):
+                    if j < i:  # Causal: token i attends to previous token j
+                        causal_strength += head_weights[i, j]
+                    else:  # Non-causal: token i attends to current/future token j
+                        non_causal_strength += head_weights[i, j]
+            
+            # Store head-level analysis
+            total_head_strength = causal_strength + non_causal_strength
+            head_percentage = (causal_strength / total_head_strength * 100) if total_head_strength > 0 else 0
+            
+            step_analysis['head_breakdown'][f'head_{head_idx}'] = {
+                'causal_strength': float(causal_strength),
+                'non_causal_strength': float(non_causal_strength),
+                'causal_percentage': float(head_percentage),
+                'non_causal_percentage': float(100 - head_percentage)
+            }
+            
+            # Accumulate total strengths
+            step_analysis['causal_strength'] += causal_strength
+            step_analysis['non_causal_strength'] += non_causal_strength
+        
+        # Calculate overall percentages for this step
+        total_step_strength = step_analysis['causal_strength'] + step_analysis['non_causal_strength']
+        if total_step_strength > 0:
+            step_analysis['causal_percentage'] = (step_analysis['causal_strength'] / total_step_strength) * 100
+            step_analysis['non_causal_percentage'] = (step_analysis['non_causal_strength'] / total_step_strength) * 100
+        
+        return step_analysis
+    
+    def _analyze_causal_attention_heads(self, attention_weights_list: List[np.ndarray]) -> Dict[str, Any]:
+        """
+        Analyze causal attention patterns across all heads for a layer.
+        
+        Args:
+            attention_weights_list: List of attention weight matrices for this layer
+            
+        Returns:
+            Dictionary containing head-level causal analysis
+        """
+        head_analysis = {}
+        
+        # Get the first attention matrix to determine number of heads
+        if not attention_weights_list:
+            return head_analysis
+        
+        first_weights = attention_weights_list[0]
+        if first_weights.ndim == 4:
+            num_heads = first_weights.shape[1]
+        elif first_weights.ndim == 3:
+            num_heads = first_weights.shape[0]
+        else:
+            return head_analysis
+        
+        # Initialize head analysis
+        for head_idx in range(num_heads):
+            head_analysis[f'head_{head_idx}'] = {
+                'total_causal_strength': 0.0,
+                'total_non_causal_strength': 0.0,
+                'causal_percentage': 0.0,
+                'non_causal_percentage': 0.0,
+                'steps_analyzed': 0
+            }
+        
+        # Analyze each step
+        for attn_weights in attention_weights_list:
+            if attn_weights.ndim == 4:
+                attn_weights = attn_weights[0]  # Remove batch dimension
+            elif attn_weights.ndim == 3:
+                pass
+            else:
+                continue
+            
+            num_heads, seq_len, _ = attn_weights.shape
+            
+            for head_idx in range(num_heads):
+                head_weights = attn_weights[head_idx]
+                
+                # Calculate causal vs non-causal attention for this head
+                causal_strength = 0.0
+                non_causal_strength = 0.0
+                
+                for i in range(seq_len):
+                    for j in range(seq_len):
+                        if j < i:  # Causal
+                            causal_strength += head_weights[i, j]
+                        else:  # Non-causal
+                            non_causal_strength += head_weights[i, j]
+                
+                # Accumulate for this head
+                head_key = f'head_{head_idx}'
+                if head_key in head_analysis:
+                    head_analysis[head_key]['total_causal_strength'] += causal_strength
+                    head_analysis[head_key]['total_non_causal_strength'] += non_causal_strength
+                    head_analysis[head_key]['steps_analyzed'] += 1
+        
+        # Calculate percentages for each head
+        for head_data in head_analysis.values():
+            total_strength = head_data['total_causal_strength'] + head_data['total_non_causal_strength']
+            if total_strength > 0:
+                head_data['causal_percentage'] = (head_data['total_causal_strength'] / total_strength) * 100
+                head_data['non_causal_percentage'] = (head_data['total_non_causal_strength'] / total_strength) * 100
+        
+        return head_analysis
+    
+    def _create_causal_attention_summary(self, layer_analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create a summary of causal attention patterns across all layers.
+        
+        Args:
+            layer_analysis: Dictionary containing layer-level causal analysis
+            
+        Returns:
+            Dictionary containing overall summary
+        """
+        if not layer_analysis:
+            return {}
+        
+        summary = {
+            'total_layers': len(layer_analysis),
+            'overall_causal_percentage': 0.0,
+            'overall_non_causal_percentage': 0.0,
+            'layer_rankings': {},
+            'causal_distribution': {
+                'highly_causal': [],      # >80% causal
+                'moderately_causal': [],  # 50-80% causal
+                'balanced': [],           # 40-60% causal
+                'moderately_non_causal': [], # 20-40% causal
+                'highly_non_causal': []   # <20% causal
+            }
+        }
+        
+        # Calculate overall percentages
+        total_causal = sum(layer['total_causal_strength'] for layer in layer_analysis.values())
+        total_non_causal = sum(layer['total_non_causal_strength'] for layer in layer_analysis.values())
+        total_strength = total_causal + total_non_causal
+        
+        if total_strength > 0:
+            summary['overall_causal_percentage'] = (total_causal / total_strength) * 100
+            summary['overall_non_causal_percentage'] = (total_non_causal / total_strength) * 100
+        
+        # Categorize layers by causal percentage
+        for layer_name, layer_data in layer_analysis.items():
+            causal_pct = layer_data['causal_percentage']
+            
+            if causal_pct > 80:
+                summary['causal_distribution']['highly_causal'].append(layer_name)
+            elif causal_pct > 50:
+                summary['causal_distribution']['moderately_causal'].append(layer_name)
+            elif causal_pct > 40:
+                summary['causal_distribution']['balanced'].append(layer_name)
+            elif causal_pct > 20:
+                summary['causal_distribution']['moderately_non_causal'].append(layer_name)
+            else:
+                summary['causal_distribution']['highly_non_causal'].append(layer_name)
+        
+        # Create layer rankings by causal percentage
+        layer_rankings = sorted(
+            [(name, data['causal_percentage']) for name, data in layer_analysis.items()],
+            key=lambda x: x[1],
+            reverse=True
+        )
+        
+        summary['layer_rankings'] = {
+            'most_causal': [name for name, _ in layer_rankings[:5]],
+            'least_causal': [name for name, _ in layer_rankings[-5:]]
+        }
+        
+        return summary
+    
+    def get_causal_attention_summary(self) -> Dict[str, Any]:
+        """
+        Get a quick summary of causal attention patterns.
+        
+        Returns:
+            Dictionary containing causal attention summary
+        """
+        causal_analysis = self.analyze_causal_attention_patterns()
+        return causal_analysis.get('overall_summary', {})
+    
+    def get_layer_causal_percentages(self) -> Dict[str, float]:
+        """
+        Get causal attention percentages for each layer.
+        
+        Returns:
+            Dictionary mapping layer names to causal percentages
+        """
+        causal_analysis = self.analyze_causal_attention_patterns()
+        layer_analysis = causal_analysis.get('layer_causal_analysis', {})
+        
+        return {
+            layer_name: layer_data['causal_percentage']
+            for layer_name, layer_data in layer_analysis.items()
+        }
+    
+    def _analyze_causal_attention_evolution(self, layer_analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Analyze how causal attention patterns evolve across generation steps.
+        
+        Args:
+            layer_analysis: Dictionary containing layer-level causal analysis
+            
+        Returns:
+            Dictionary containing step evolution analysis
+        """
+        evolution = {
+            'step_trends': {},
+            'layer_consistency': {},
+            'overall_evolution': {}
+        }
+        
+        # Analyze step-by-step evolution
+        all_steps = set()
+        for layer_data in layer_analysis.values():
+            for step in layer_data['step_analysis'].keys():
+                all_steps.add(step)
+        
+        all_steps = sorted(list(all_steps))
+        
+        # Calculate average causal percentage per step
+        step_causal_percentages = {}
+        for step in all_steps:
+            step_percentages = []
+            for layer_data in layer_analysis.values():
+                if step in layer_data['step_analysis']:
+                    step_percentages.append(layer_data['step_analysis'][step]['causal_percentage'])
+            
+            if step_percentages:
+                step_causal_percentages[step] = {
+                    'mean': np.mean(step_percentages),
+                    'std': np.std(step_percentages),
+                    'min': np.min(step_percentages),
+                    'max': np.max(step_percentages)
+                }
+        
+        evolution['step_trends'] = step_causal_percentages
+        
+        # Analyze layer consistency across steps
+        for layer_name, layer_data in layer_analysis.items():
+            step_percentages = []
+            for step_data in layer_data['step_analysis'].values():
+                step_percentages.append(step_data['causal_percentage'])
+            
+            if step_percentages:
+                evolution['layer_consistency'][layer_name] = {
+                    'mean': np.mean(step_percentages),
+                    'std': np.std(step_percentages),
+                    'min': np.min(step_percentages),
+                    'max': np.max(step_percentages),
+                    'consistency_score': 1.0 / (1.0 + np.std(step_percentages))  # Higher = more consistent
+                }
+        
+        # Overall evolution summary
+        if step_causal_percentages:
+            all_step_means = [data['mean'] for data in step_causal_percentages.values()]
+            evolution['overall_evolution'] = {
+                'trend': 'increasing' if all_step_means[-1] > all_step_means[0] else 'decreasing',
+                'total_change': all_step_means[-1] - all_step_means[0],
+                'volatility': np.std(all_step_means)
+            }
+        
+        return evolution

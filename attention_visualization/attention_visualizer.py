@@ -471,7 +471,42 @@ class AttentionVisualizer:
                 except Exception as e:
                     logger.warning(f"Failed to create attention evolution for {layer_name}: {e}")
             
-            # 3. Create summary statistics
+            # 3. Create causal attention analysis
+            try:
+                from attention_visualization.attention_analyzer import AttentionAnalyzer
+                analyzer = AttentionAnalyzer(attention_maps)
+                causal_analysis = analyzer.analyze_causal_attention_patterns()
+                
+                # Save causal analysis report
+                causal_file = output_dir / f"causal_attention_analysis_{timestamp}.json"
+                with open(causal_file, 'w') as f:
+                    json.dump(causal_analysis, f, indent=2, default=str)
+                saved_files["causal_attention_analysis"] = str(causal_file)
+                
+                # Create causal attention summary
+                causal_summary = causal_analysis.get('overall_summary', {})
+                if causal_summary:
+                    print(f"\n🎯 Causal Attention Summary:")
+                    print(f"   Overall causal: {causal_summary.get('overall_causal_percentage', 0):.1f}%")
+                    print(f"   Overall non-causal: {causal_summary.get('overall_non_causal_percentage', 0):.1f}%")
+                    print(f"   Total layers analyzed: {causal_summary.get('total_layers', 0)}")
+                    
+                    # Show top and bottom layers
+                    most_causal = causal_summary.get('layer_rankings', {}).get('most_causal', [])
+                    least_causal = causal_summary.get('layer_rankings', {}).get('least_causal', [])
+                    
+                    if most_causal:
+                        print(f"   Most causal layers: {', '.join(most_causal[:3])}")
+                    if least_causal:
+                        print(f"   Least causal layers: {', '.join(least_causal[:3])}")
+                
+                logger.info("Causal attention analysis completed and saved")
+                
+            except Exception as e:
+                logger.warning(f"Failed to create causal attention analysis: {e}")
+                print(f"⚠️  Causal attention analysis failed: {e}")
+            
+            # 4. Create summary statistics
             summary_stats = self._create_attention_summary(attention_maps)
             summary_file = output_dir / f"attention_summary_{timestamp}.json"
             with open(summary_file, 'w') as f:
