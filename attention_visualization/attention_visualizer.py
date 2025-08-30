@@ -53,6 +53,7 @@ class AttentionVisualizer:
         prompt_tokens: Optional[List[str]] = None,
         generated_tokens: Optional[List[str]] = None,
         max_layers: int = 32,
+        max_tokens: int = 25,
         save_path: Optional[str] = None
     ) -> plt.Figure:
         """
@@ -122,7 +123,6 @@ class AttentionVisualizer:
                 num_heads = attention_weights.shape[0]
                 
                 # Limit tokens for readability
-                max_tokens = 25
                 if attention_weights.shape[-1] > max_tokens:
                     attention_weights = attention_weights[:, :max_tokens, :max_tokens]
                 
@@ -390,7 +390,8 @@ class AttentionVisualizer:
         prompt_tokens: Optional[List[str]] = None,
         generated_tokens: Optional[List[str]] = None,
         output_dir: Optional[str] = None,
-        max_layers: int = 8
+        max_layers: int = 8,
+        max_tokens: int = 25
     ) -> Dict[str, str]:
         """
         Create a comprehensive attention visualization report.
@@ -432,7 +433,7 @@ class AttentionVisualizer:
             for step in key_steps:
                 try:
                     figures = self.create_layer_attention_comparison(
-                        attention_maps, step, prompt_tokens, generated_tokens, max_layers,
+                        attention_maps, step, prompt_tokens, generated_tokens, max_layers, max_tokens,
                         save_path=str(output_dir / f"step_{step}_placeholder.png")
                     )
                     if figures:

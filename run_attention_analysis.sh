@@ -1,22 +1,25 @@
 #!/bin/bash
-
 # Complete Attention Analysis Workflow
-# Usage: ./run_attention_analysis.sh [prompt] [output_directory]
+# Usage: ./run_attention_analysis.sh [prompt] [output_directory] [max_tokens]
 # Examples:
-#   ./run_attention_analysis.sh                                    # Default prompt, default output
-#   ./run_attention_analysis.sh "your prompt"                      # Custom prompt, default output
-#   ./run_attention_analysis.sh "your prompt" "custom/output/path"  # Custom prompt and output
+#   ./run_attention_analysis.sh                                    # Default prompt, default output, 25 tokens
+#   ./run_attention_analysis.sh "your prompt"                      # Custom prompt, default output, 25 tokens
+#   ./run_attention_analysis.sh "your prompt" "custom/output/path"  # Custom prompt and output, 25 tokens
+#   ./run_attention_analysis.sh "your prompt" "output" 50          # Custom prompt, output, and 50 tokens
 
 set -e  # Exit on any error
 
 # Parse arguments
 PROMPT="${1:-'what is 5 * 7 - 4 * -5?'}"
 OUTPUT_DIR="${2:-'outputs/attention_analysis'}"
+MAX_TOKENS="${3:-25}"
 
 echo "🎨 Complete Attention Analysis Workflow"
 echo "======================================"
 echo "Prompt: $PROMPT"
 echo "Output directory: $OUTPUT_DIR"
+echo "Max tokens per visualization: $MAX_TOKENS"
+echo "Generation parameters: gen_length=512, steps=512, block_length=128"
 echo ""
 
 # Step 1: Clean up previous outputs
@@ -25,7 +28,7 @@ rm -rf "$OUTPUT_DIR"/* 2>/dev/null || true
 
 # Step 2: Generate text with attention capture
 echo "📝 Generating text with attention visualization..."
-python mmada_api.py "$PROMPT" --visualize_attention --save_history --enable_cot
+python mmada_api.py "$PROMPT" --visualize_attention --save_history --enable_cot --gen_length 512 --steps 512 --block_length 128
 
 # Step 3: Create Python script for visualization
 echo "🎨 Creating attention visualizations..."
@@ -40,7 +43,10 @@ result = generate_text(
     "$PROMPT",
     visualize_attention=True,
     save_history=True,
-    enable_cot=True
+    enable_cot=True,
+    gen_length=512,
+    steps=512,
+    block_length=128
 )
 
 if len(result) == 5:
@@ -56,7 +62,8 @@ if len(result) == 5:
     visualizer = AttentionVisualizer(str(output_dir))
     saved_files = visualizer.create_comprehensive_attention_report(
         attention_maps, 
-        max_layers=32
+        max_layers=32,
+        max_tokens=$MAX_TOKENS
     )
     
     print(f"✅ Created {len(saved_files)} visualization components")
@@ -95,6 +102,7 @@ echo "⚡ Fast generation: Only every 64th step"
 echo "📝 Clean titles: Layer X - Step Y"
 echo ""
 echo "💡 Usage examples:"
-echo "   ./run_attention_analysis.sh                                    # Default prompt, default output"
-echo "   ./run_attention_analysis.sh \"your prompt\"                      # Custom prompt, default output"
-echo "   ./run_attention_analysis.sh \"your prompt\" \"custom/output/path\"  # Custom prompt and output"
+echo "   ./run_attention_analysis.sh                                    # Default prompt, default output, 25 tokens"
+echo "   ./run_attention_analysis.sh \"your prompt\"                      # Custom prompt, default output, 25 tokens"
+echo "   ./run_attention_analysis.sh \"your prompt\" \"custom/output/path\"  # Custom prompt and output, 25 tokens"
+echo "   ./run_attention_analysis.sh \"your prompt\" \"output\" 50          # Custom prompt, output, and 50 tokens"
