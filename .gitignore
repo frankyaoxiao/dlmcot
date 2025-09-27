@@ -91,7 +91,6 @@ datasets/
 
 # Visualization outputs
 plots/
-figures/
 images/
 *.png
 *.jpg
